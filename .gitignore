@@ -1,0 +1,32 @@
+# macOS
+.DS_Store
+
+# Xcode / Swift
+*.xcuserstate
+xcuserdata/
+DerivedData/
+build/
+*.xcworkspace/xcuserdata/
+.swiftpm/
+Package.resolved
+
+# Dependencies
+Pods/
+Carthage/Build/
+
+# Node (tooling)
+node_modules/
+npm-debug.log*
+
+# Environment / secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Logs
+*.log
+
+# Editor
+.vscode/
+.idea/

@@ -1,0 +1,8 @@
+{
+  "name": "edgecloud",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check:device-registry": "node --check device_registry/index.js"
+  }
+}

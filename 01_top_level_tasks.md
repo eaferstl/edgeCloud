@@ -46,7 +46,7 @@ Do not pre-fill completion. Team leads should update this during the build.
 ### Authentication - Kevin
 
 | ID | Task | Status | Notes |
-|---|---|---|
+|---|---|---|---|
 | AUTH-001 | Fill out `auth/prd.md` | Not Started |  |
 | AUTH-002 | Fill out `auth/spec.md` | Not Started |  |
 | AUTH-003 | Define auth approach for demo | Not Started |  |
@@ -56,7 +56,7 @@ Do not pre-fill completion. Team leads should update this during the build.
 ### Device Registry - Chao
 
 | ID | Task | Status | Notes |
-|---|---|---|
+|---|---|---|---|
 | DEV-001 | Fill out `device_registry/prd.md` | Not Started |  |
 | DEV-002 | Fill out `device_registry/spec.md` | Not Started |  |
 | DEV-003 | Define device registration behavior | Not Started |  |
@@ -66,7 +66,7 @@ Do not pre-fill completion. Team leads should update this during the build.
 ### Job Queue - Cam and Elliot
 
 | ID | Task | Status | Notes |
-|---|---|---|
+|---|---|---|---|
 | QUEUE-001 | Fill out `job_queue/prd.md` | Not Started |  |
 | QUEUE-002 | Fill out `job_queue/spec.md` | Not Started |  |
 | QUEUE-003 | Define job lifecycle for demo | Not Started |  |
@@ -76,7 +76,7 @@ Do not pre-fill completion. Team leads should update this during the build.
 ### Job Execution - Steve and Maroua
 
 | ID | Task | Status | Notes |
-|---|---|---|
+|---|---|---|---|
 | EXEC-001 | Fill out `job_execution/prd.md` | Not Started |  |
 | EXEC-002 | Fill out `job_execution/spec.md` | Not Started |  |
 | EXEC-003 | Define demo workload | Not Started |  |
@@ -86,7 +86,7 @@ Do not pre-fill completion. Team leads should update this during the build.
 ### Coordination - Keith
 
 | ID | Task | Status | Notes |
-|---|---|---|
+|---|---|---|---|
 | COORD-001 | Fill out `coordination/prd.md` | Not Started |  |
 | COORD-002 | Fill out `coordination/spec.md` | Not Started |  |
 | COORD-003 | Maintain `00_master_prd.md` | Not Started |  |
@@ -98,7 +98,7 @@ Do not pre-fill completion. Team leads should update this during the build.
 ### Legal
 
 | ID | Task | Status | Notes |
-|---|---|---|
+|---|---|---|---|
 | LEGAL-001 | Fill out `legal/prd.md` | Not Started |  |
 | LEGAL-002 | Fill out `legal/spec.md` | Not Started |  |
 | LEGAL-003 | Define approved presentation language | Not Started |  |

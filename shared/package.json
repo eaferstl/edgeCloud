@@ -1,0 +1,27 @@
+{
+  "name": "@edgecloud/shared",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Shared job-envelope, deterministic zip, claims, and trust-chain logic",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./*": "./src/*"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@libp2p/crypto": "5.1.14",
+    "@orbitdb/core": "4.0.0",
+    "fflate": "0.8.2",
+    "tweetnacl": "1.0.3"
+  },
+  "devDependencies": {
+    "js-sha256": "0.11.1"
+  }
+}

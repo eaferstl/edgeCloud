@@ -24,9 +24,25 @@ npm-debug.log*
 *.pem
 *.key
 
+# Attendee PII — distributed to server operators out-of-band, never committed
+attendees-*.csv
+
+# Runtime state
+server-data/
+worker-data/
+server/server-data/
+worker/worker-data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
 # Logs
 *.log
 
 # Editor
 .vscode/
 .idea/
+
+# Superseded Kubo scaffold archive (binary)
+node-ipfs-container.zip

@@ -1,0 +1,34 @@
+# syntax=docker/dockerfile:1
+
+# Multi-stage variant: use when the app has a build step (TypeScript, bundler,
+# etc.) and you want only the build artifacts + prod deps in the final image.
+# This variant does NOT bundle IPFS — pair it with the docker-compose topology
+# (kubo as its own service), or graft in the supervisord setup from Dockerfile
+# if you want the single-image appliance with a build step.
+
+FROM debian:sid-slim AS build
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends nodejs npm && \
+    rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM debian:sid-slim
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends nodejs ca-certificates tini && \
+    rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/package.json ./package.json
+
+# Run as non-root in the slim runtime image.
+RUN useradd --system --uid 10001 --no-create-home app && chown -R app:app /app
+USER app
+
+EXPOSE 3000
+ENTRYPOINT ["tini", "--"]
+CMD ["node", "dist/index.js"]

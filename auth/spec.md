@@ -1,11 +1,36 @@
 # Spec: Authentication
 
+> **As-built (2026-06-03 · `Demo Ready`).** Three layers, all Ed25519:
+> 1. **Registration / allowlist** — a user enters their Edge Esmeralda email; the
+>    server checks it against a SQLite allowlist imported from the attendee CSV,
+>    enforces ≤4 keys per email, and publishes only `HMAC-SHA256(email, SHARED_SALT)`
+>    + the pubkey to the OrbitDB `edgecloud-registry` (raw email never leaves SQLite).
+>    The browser generates the keypair locally (tweetnacl) and stores it in
+>    localStorage.
+> 2. **Job authenticity** — every job envelope is signed over its jobId; workers
+>    verify the signature first, then confirm the pubkey has a valid server
+>    *attestation* in the registry (re-syncing before rejecting unknown keys).
+> 3. **Result retrieval** — challenge/response: the server issues a random nonce,
+>    the browser signs it, and only a verified, submitting pubkey may read a result.
+>    Server-to-server trust is a signed endorsement chain from a genesis key
+>    (`edgecloud-servers`). Code: `server/src/{db,auth}.js`, `shared/src/{crypto,trust}.js`,
+>    `server/src/public/app.js`. Full design: **`../ARCHITECTURE.md`**.
+>
+> **Manual test / integration check:**
+> ```bash
+> curl -s -XPOST http://146.190.123.91/api/register -H 'content-type: application/json' \
+>   -d '{"email":"not-an-attendee@example.com","pubkey":"<32-byte b64>"}'   # 403 not on attendee list
+> # registering a 5th key for one email → 409; result fetch without a signed-nonce session → 401;
+> # a session whose pubkey did not submit the job → 403. All exercised by:
+> node scripts/e2e-client.mjs http://146.190.123.91 <attendee-email> "6 * 7"   # includes the 403-stranger check
+> ```
+
 ## 1. Status
 
-Status: `Not Started`  
+Status: `Demo Ready`  
 Owner: Kevin  
 Team: Authentication  
-Last updated: TODO
+Last updated: 2026-06-03
 
 ---
 

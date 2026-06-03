@@ -1,0 +1,201 @@
+// Express app: webform + HTTP↔OrbitDB bridge + key registry.
+//
+// The browser never joins libp2p; it signs things locally (tweetnacl) and
+// talks HTTP to any central server, which injects jobs into / reads results
+// out of the OrbitDB network on its behalf.
+
+import express from 'express';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { verifyEnvelope } from '@edgecloud/shared/envelope.js';
+import { parseJobZipB64 } from '@edgecloud/shared/zip.js';
+import { createAttestation, createEndorsement } from '@edgecloud/shared/trust.js';
+import { isValidPubkeyB64 } from '@edgecloud/shared/crypto.js';
+import { MAX_KEYS_PER_EMAIL, GENESIS_SERVER_KEY } from '@edgecloud/shared/constants.js';
+import { requireSession } from '../auth.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+const MODULES_DIR = path.join(__dirname, '..', 'modules');
+
+export function createApp({ q, auth, databases, indexers, heartbeats, serverKey, libp2p, config, log = console.log }) {
+  const app = express();
+  app.use(express.json({ limit: '6mb' }));
+
+  // ---------- registration ----------
+
+  app.post('/api/register', async (req, res) => {
+    const { email, pubkey } = req.body || {};
+    if (typeof email !== 'string' || !email.includes('@')) {
+      return res.status(400).json({ error: 'invalid email' });
+    }
+    if (!isValidPubkeyB64(pubkey)) {
+      return res.status(400).json({ error: 'invalid public key' });
+    }
+    if (!q.emailAllowed(email)) {
+      return res.status(403).json({ error: 'email is not on the Edge Esmeralda attendee list' });
+    }
+    const emailHmac = q.emailHmacOf(email);
+    if (q.isRegisteredKey(pubkey)) {
+      // idempotent re-register of the same key
+      return res.json({ ok: true, alreadyRegistered: true });
+    }
+    if (q.keyCountForHmac(emailHmac) >= MAX_KEYS_PER_EMAIL) {
+      return res.status(409).json({ error: `this email already has ${MAX_KEYS_PER_EMAIL} registered keys` });
+    }
+    // Attest + publish to OrbitDB (pubkey + emailHmac only — never the email).
+    const entry = createAttestation({
+      pubkey,
+      emailHmac,
+      serverPublicKeyB64: serverKey.publicKey,
+      serverSecretKeyB64: serverKey.secretKey,
+    });
+    await databases.registry.add(entry);
+    q.upsertRegisteredKey(pubkey, emailHmac, entry.addedAt);
+    log(`[register] new key ${pubkey.slice(0, 12)}… (${q.keyCountForHmac(emailHmac)}/${MAX_KEYS_PER_EMAIL} for this email)`);
+    res.json({ ok: true });
+  });
+
+  // Worker fallback for the registry-grace path.
+  app.get('/api/registry/:pubkey', (req, res) => {
+    res.json({ registered: q.isRegisteredKey(req.params.pubkey) });
+  });
+
+  // ---------- challenge/response auth ----------
+
+  app.get('/api/challenge', (req, res) => {
+    const nonce = auth.issueChallenge(req.query.pubkey);
+    if (!nonce) return res.status(400).json({ error: 'invalid pubkey' });
+    res.json({ nonce });
+  });
+
+  app.post('/api/auth/verify', (req, res) => {
+    const { pubkey, nonce, sig } = req.body || {};
+    const token = auth.verifyChallenge(pubkey, nonce, sig);
+    if (!token) return res.status(401).json({ error: 'challenge verification failed' });
+    res.json({ token });
+  });
+
+  // ---------- jobs ----------
+
+  app.post('/api/jobs', async (req, res) => {
+    const env = req.body;
+    const envErr = verifyEnvelope(env);
+    if (envErr) return res.status(400).json({ error: `invalid envelope: ${envErr}` });
+    try {
+      parseJobZipB64(env.zipB64); // structural + manifest validation
+    } catch (e) {
+      return res.status(400).json({ error: `invalid job payload: ${e.message}` });
+    }
+    if (!q.isRegisteredKey(env.pubkey)) {
+      return res.status(403).json({ error: 'public key is not registered' });
+    }
+    q.addJobSubmitter(env.jobId, env.pubkey, env.submittedAt ?? Date.now());
+
+    // Duplicate submission == cache hit: answer immediately, execute nothing.
+    const cached = q.getCachedResult(env.jobId);
+    if (cached) {
+      return res.json({ jobId: env.jobId, status: 'done', cached: true, result: cached });
+    }
+    if (q.jobSeen(env.jobId) && (await alreadyQueued(databases, env.jobId))) {
+      return res.json({ jobId: env.jobId, status: 'queued', cached: false });
+    }
+    await databases.jobs.add(env);
+    log(`[jobs] queued ${env.jobId.slice(0, 12)}… from ${env.pubkey.slice(0, 12)}…`);
+    res.json({ jobId: env.jobId, status: 'queued', cached: false });
+  });
+
+  app.get('/api/jobs/:jobId/status', (req, res) => {
+    const { jobId } = req.params;
+    if (q.getCachedResult(jobId)) return res.json({ jobId, status: 'done' });
+    if (q.jobSeen(jobId)) return res.json({ jobId, status: 'queued' });
+    res.json({ jobId, status: 'unknown' });
+  });
+
+  app.get('/api/jobs/:jobId/result', requireSession(auth), (req, res) => {
+    const { jobId } = req.params;
+    if (!q.isJobSubmitter(jobId, req.pubkey)) {
+      return res.status(403).json({ error: 'this key did not submit that job' });
+    }
+    const result = q.getCachedResult(jobId);
+    if (!result) return res.status(202).json({ jobId, status: q.jobSeen(jobId) ? 'queued' : 'unknown' });
+    res.json({ jobId, status: 'done', result });
+  });
+
+  // ---------- example WASM modules ----------
+
+  app.get('/api/modules', (req, res) => {
+    const manifestPath = path.join(MODULES_DIR, 'modules.json');
+    if (!fs.existsSync(manifestPath)) return res.json({ modules: [] });
+    res.json({ modules: JSON.parse(fs.readFileSync(manifestPath, 'utf8')) });
+  });
+
+  app.get('/api/modules/:name', (req, res) => {
+    const name = path.basename(req.params.name); // no traversal
+    if (!name.endsWith('.wasm')) return res.status(404).end();
+    const file = path.join(MODULES_DIR, name);
+    if (!fs.existsSync(file)) return res.status(404).end();
+    res.type('application/wasm').send(fs.readFileSync(file));
+  });
+
+  // ---------- network info / status ----------
+
+  app.get('/api/dbinfo', (req, res) => {
+    res.json({
+      peerId: libp2p.peerId.toString(),
+      multiaddrs: libp2p.getMultiaddrs().map((m) => m.toString()),
+      publicMultiaddrs: config.publicMultiaddrs,
+      serverPubkey: serverKey.publicKey,
+      genesisKey: GENESIS_SERVER_KEY,
+      databases: Object.fromEntries(
+        Object.entries(databases).map(([k, db]) => [k, db.address.toString()])
+      ),
+    });
+  });
+
+  app.get('/api/status', (req, res) => {
+    res.json({
+      workersOnline: heartbeats.count(),
+      workers: heartbeats.online(),
+      registeredKeys: q.registeredKeyCount(),
+      allowlistedEmails: q.allowlistCount(),
+      cachedResults: q.cachedResultCount(),
+      trustedServers: indexers.state.trustedServers.size,
+    });
+  });
+
+  // ---------- admin (localhost only): endorse another central server ----------
+
+  app.post('/api/admin/endorse', async (req, res) => {
+    const remote = req.socket.remoteAddress || '';
+    if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(remote)) {
+      return res.status(403).json({ error: 'admin endpoints are localhost-only' });
+    }
+    const { serverPubkey, multiaddrs = [], label = '' } = req.body || {};
+    if (!isValidPubkeyB64(serverPubkey)) return res.status(400).json({ error: 'invalid serverPubkey' });
+    const entry = createEndorsement({
+      serverPubkey,
+      multiaddrs,
+      label,
+      endorserPublicKeyB64: serverKey.publicKey,
+      endorserSecretKeyB64: serverKey.secretKey,
+    });
+    await databases.servers.add(entry);
+    await indexers.fullRescan();
+    log(`[admin] endorsed server ${serverPubkey.slice(0, 12)}… (${label})`);
+    res.json({ ok: true, entry });
+  });
+
+  // ---------- static frontend ----------
+  app.use(express.static(PUBLIC_DIR));
+
+  return app;
+}
+
+async function alreadyQueued(databases, jobId) {
+  for await (const entry of databases.jobs.iterator()) {
+    if (entry?.value?.jobId === jobId) return true;
+  }
+  return false;
+}

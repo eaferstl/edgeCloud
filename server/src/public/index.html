@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>edgeCloud — Edge Esmeralda 2026</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>☁️ edgeCloud</h1>
+    <p class="tagline">Decentralized compute on Edge Esmeralda devices — prototype demo</p>
+    <div id="netStatus" class="net-status">connecting…</div>
+  </header>
+
+  <main>
+    <!-- Step 1: identity -->
+    <section class="card" id="identityCard">
+      <h2>1 · Your identity</h2>
+      <div id="noIdentity">
+        <p>Enter the email you used to register for Edge Esmeralda. A keypair is created
+           <em>in your browser</em> and stays in this browser (localStorage); only the public
+           key is sent to the network.</p>
+        <form id="registerForm">
+          <input type="email" id="emailInput" placeholder="you@example.com" autocomplete="email" required>
+          <button type="submit" id="registerBtn">Create key &amp; register</button>
+        </form>
+      </div>
+      <div id="hasIdentity" hidden>
+        <p>Registered as <strong id="identityEmail"></strong></p>
+        <p class="mono small">pubkey: <span id="identityPubkey"></span></p>
+        <button id="forgetBtn" class="secondary">Forget this key</button>
+      </div>
+      <p id="registerMsg" class="msg"></p>
+    </section>
+
+    <!-- Step 2: job -->
+    <section class="card" id="jobCard">
+      <h2>2 · Submit a job</h2>
+      <label for="exampleSelect">What should the network compute?</label>
+      <select id="exampleSelect"></select>
+      <div id="jsEditor">
+        <label for="jsInput">JavaScript (a bare expression gets wrapped in <code>console.log(…)</code>)</label>
+        <textarea id="jsInput" rows="6" spellcheck="false">6 * 7</textarea>
+      </div>
+      <div id="wasmInfo" hidden class="small"></div>
+      <button id="submitBtn">Sign &amp; submit job</button>
+      <p id="submitMsg" class="msg"></p>
+    </section>
+
+    <!-- Step 3: result -->
+    <section class="card" id="resultCard" hidden>
+      <h2>3 · Result</h2>
+      <p class="small mono">job <span id="resultJobId"></span></p>
+      <p id="resultStatus" class="msg"></p>
+      <pre id="resultOut" hidden></pre>
+      <pre id="resultErr" class="stderr" hidden></pre>
+      <p id="resultMeta" class="small" hidden></p>
+    </section>
+
+    <section class="card history" id="historyCard" hidden>
+      <h2>Past jobs (this browser)</h2>
+      <ul id="historyList"></ul>
+    </section>
+  </main>
+
+  <footer>
+    <p>Prototype for demonstration only. Jobs run on volunteer attendee devices;
+       don't submit anything secret, and don't rely on this for anything important.</p>
+  </footer>
+
+  <script src="vendor/nacl.min.js"></script>
+  <script src="vendor/sha256.min.js"></script>
+  <script src="vendor/fflate.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+{
+  "name": "@edgecloud/worker",
+  "private": true,
+  "version": "0.1.0",
+  "description": "edgeCloud worker node: replicates the OrbitDB job queue, claims and executes JS/WASM jobs",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "@libp2p/gossipsub": "16.0.1",
+    "@chainsafe/libp2p-noise": "17.0.0",
+    "@chainsafe/libp2p-yamux": "8.0.1",
+    "@edgecloud/shared": "0.1.0",
+    "@libp2p/bootstrap": "12.0.24",
+    "@libp2p/circuit-relay-v2": "4.2.6",
+    "@libp2p/identify": "4.1.7",
+    "@libp2p/tcp": "11.0.21",
+    "@libp2p/websockets": "10.1.14",
+    "@multiformats/multiaddr": "13.0.3",
+    "@orbitdb/core": "4.0.0",
+    "blockstore-level": "4.0.1",
+    "datastore-level": "13.0.1",
+    "helia": "6.1.4",
+    "libp2p": "3.3.3"
+  }
+}

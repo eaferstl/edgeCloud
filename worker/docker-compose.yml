@@ -1,0 +1,29 @@
+# edgeCloud worker node — run this to donate compute to the network.
+#
+#   cd worker && docker compose up --build -d
+#
+# NET_ADMIN is required so the container can install its OWN egress firewall
+# (blocking submitted code from reaching private networks / your LAN).
+# The worker keeps its identity (libp2p peerId) in the worker_data volume.
+
+services:
+  worker:
+    build:
+      context: ..
+      dockerfile: worker/Dockerfile
+    cap_add:
+      - NET_ADMIN
+    environment:
+      # Rendezvous server (genesis defaults are baked in; override here)
+      # RENDEZVOUS_MULTIADDR: "/ip4/146.190.123.91/tcp/4002/ws/p2p/<SERVER_PEER_ID>"
+      # EDGECLOUD_HTTP_FALLBACK: "http://146.190.123.91"
+      # Local-testing escape hatches (do NOT use in production):
+      # EDGECLOUD_SKIP_FIREWALL: "1"
+      # EDGECLOUD_FIREWALL_ALLOW: "192.168.1.50/32"
+      EDGECLOUD_DATA: /data
+    volumes:
+      - worker_data:/data
+    restart: unless-stopped
+
+volumes:
+  worker_data:

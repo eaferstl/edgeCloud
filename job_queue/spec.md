@@ -1,11 +1,34 @@
 # Spec: Job Queue
 
+> **As-built (2026-06-03 · `Demo Ready`).** The queue is the OrbitDB `edgecloud-jobs`
+> events database, replicated to every node. A browser builds a signed job envelope
+> (`{ jobId=sha256(zipB64), zipB64, pubkey, sig, … }`) and POSTs it to a central
+> server, which validates it and appends it to the queue (the server is the sole
+> bridge/injector; the browser never joins libp2p). Workers consume the queue and
+> coordinate **exactly-once-ish** execution with no central scheduler: a claims log
+> (`edgecloud-claims`) plus a deterministic tiebreak (`min sha256(jobId|peerId|round)`)
+> picks one winner per round; a timeout lets a backup take over a dead winner;
+> results are deduped by jobId in `edgecloud-results`. Duplicate submission of the
+> same code → same jobId → instant cached result, no re-execution. Code:
+> `shared/src/{envelope,zip,claims}.js`, `server/src/http/app.js`,
+> `worker/src/coordination.js`. Full design: **`../ARCHITECTURE.md`**.
+>
+> **Manual test / integration check:**
+> ```bash
+> # submit then resubmit identical code — second is an instant cache hit
+> node scripts/e2e-client.mjs http://146.190.123.91 <attendee-email> "6 * 7" --expect 42
+> node scripts/e2e-client.mjs http://146.190.123.91 <attendee-email> "6 * 7" --expect 42  # cached:true
+> curl -s http://146.190.123.91/api/jobs/<jobId>/status   # queued | done | unknown
+> ```
+> Verified: with two live workers, each job executes exactly once
+> (`result.executedBy` is a single peer; the loser cancels its backup timer).
+
 ## 1. Status
 
-Status: `Not Started`  
+Status: `Demo Ready`  
 Owner: Cam and Elliot  
 Team: Job Queue  
-Last updated: TODO
+Last updated: 2026-06-03
 
 ---
 

@@ -2,41 +2,47 @@
 
 ## 1. Status
 
-Status: `Not Started`  
+Status: `Demo Ready`  
 Owner: Keith / Coordination  
-Last updated: TODO  
+Last updated: 2026-06-03  
 Presentation date: TODO
 
 ---
 
 ## 2. Summary
 
-TODO: Coordination to complete.
+**Built and running.** edgeCloud is a decentralized-compute prototype for Edge
+Esmeralda 2026. An attendee opens `http://146.190.123.91` (mobile or desktop),
+registers the email they signed up with — generating an Ed25519 keypair in the
+browser — and submits a small compute job (a JavaScript expression or a WASM module
+from a dropdown). The job is signed, placed on an **OrbitDB**-backed job queue that
+replicates over **libp2p** to volunteer **Docker worker nodes**, which coordinate so
+exactly one runs it, then return the result through OrbitDB to the central server,
+which shows it to the submitter and no one else (challenge/response auth).
 
-Briefly describe what the prototype is intended to demonstrate.
+Implementation details live in **`ARCHITECTURE.md`** (authoritative) and the code
+under `shared/`, `server/`, `worker/`. The earlier Kubo/go-ipfs container scaffold
+(`node-ipfs-container/`) is superseded by the OrbitDB + Helia + js-libp2p stack.
 
-Suggested scope to refine:
-
-> A decentralized Cloud prototype in which a user can submit a job, available devices can participate as workers, the system can coordinate job assignment or claiming, a worker can execute the job, and the result/status can be shown in a demo.
+> This is a prototype for demonstration only — not production-ready, not a security
+> boundary for arbitrary untrusted code, not privacy/compliance-grade. See
+> `04_decisions_risks_cuts.md` and `legal/spec.md`.
 
 ---
 
 ## 3. Demo promise
 
-TODO: Coordination to finalize.
+The live demo shows the full end-to-end flow (all steps below are implemented and
+verified on the live network):
 
-The live demo should show the smallest credible end-to-end flow.
-
-Draft checklist:
-
-- [ ] A user/session exists.
-- [ ] A device registers or appears as available.
-- [ ] A job is submitted.
-- [ ] The job enters the queue.
-- [ ] A worker/device claims or receives the job.
-- [ ] The worker/device executes the job.
-- [ ] The worker/device reports the result.
-- [ ] The final job status/result is visible.
+- [x] A user/session exists (in-browser Ed25519 key, tied to an attendee email).
+- [x] A device registers or appears as available (Docker worker shows in `/api/status`).
+- [x] A job is submitted (signed envelope via the webform).
+- [x] The job enters the queue (OrbitDB `edgecloud-jobs`, replicated to workers).
+- [x] A worker/device claims the job (claims log + deterministic tiebreak; exactly one winner).
+- [x] The worker/device executes the job (`node` for JS, `wasmtime` for WASM, sandboxed container).
+- [x] The worker/device reports the result (OrbitDB `edgecloud-results`).
+- [x] The final job status/result is visible to the submitter only (challenge/response auth).
 - [ ] Presentation language is legally reviewed.
 
 ---

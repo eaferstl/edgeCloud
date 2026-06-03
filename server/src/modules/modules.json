@@ -1,0 +1,12 @@
+[
+  {
+    "name": "hello.wasm",
+    "label": "Hello from WebAssembly (WASI fd_write)",
+    "args": []
+  },
+  {
+    "name": "primes.wasm",
+    "label": "Primes below 1000 (sieve, hand-written WebAssembly)",
+    "args": []
+  }
+]

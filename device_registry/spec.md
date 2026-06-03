@@ -1,11 +1,29 @@
 # Spec: Device Registry
 
+> **As-built (2026-06-03 · `Demo Ready`, lightweight).** Worker "devices" are not
+> pre-registered; a device joins simply by running the worker container, which dials
+> the rendezvous relay and begins replicating the OrbitDB databases. Liveness is
+> tracked via a gossipsub presence heartbeat (`edgecloud/heartbeat/v1`, every 5 s,
+> evicted after 15 s) that the server surfaces at `GET /api/status`
+> (`workersOnline` / `workers`). This presence view is **UI-only** — execution
+> coordination uses the claims log, not the heartbeat, so the registry is not a
+> correctness dependency. Worker identity (libp2p peerId) is persisted on the
+> container's `/data` volume so a device keeps its ID across restarts. Code:
+> `server/src/heartbeats.js`, `worker/src/index.js`. Full design: **`../ARCHITECTURE.md`**.
+>
+> **Manual test / integration check:**
+> ```bash
+> cd worker && docker compose up --build -d        # start a device
+> curl -s http://146.190.123.91/api/status         # workersOnline increments; peerId listed in "workers"
+> docker stop edgecloud-worker                      # within ~15s it drops off the status list
+> ```
+
 ## 1. Status
 
-Status: `Not Started`  
+Status: `Demo Ready`  
 Owner: Chao  
 Team: Device Registry  
-Last updated: TODO
+Last updated: 2026-06-03
 
 ---
 

@@ -1,0 +1,37 @@
+# Decoupled topology (recommended for anything beyond a self-contained
+# appliance): Node app and Kubo run as independent services with independent
+# lifecycles, restarts, and resource limits.
+#
+# The IPFS API (5001) is deliberately NOT published to the host. The app
+# reaches it over the internal compose network at http://ipfs:5001.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.multistage
+    environment:
+      # App talks to the API over the internal network only.
+      IPFS_API_URL: http://ipfs:5001
+    ports:
+      - "3000:3000"
+    depends_on:
+      - ipfs
+    restart: unless-stopped
+
+  ipfs:
+    image: ipfs/kubo:v0.40.0
+    command: ["daemon", "--migrate=true"]
+    environment:
+      IPFS_PROFILE: server
+    volumes:
+      - ipfs_data:/data/ipfs
+    ports:
+      - "4001:4001"      # swarm / p2p — safe to expose
+      - "4001:4001/udp"  # QUIC
+      - "8080:8080"      # gateway — expose only if you serve content publicly
+      # 5001 (API) intentionally NOT published. Root-equivalent, unauthenticated.
+    restart: unless-stopped
+
+volumes:
+  ipfs_data:

@@ -1,11 +1,34 @@
 # Spec: Job Execution
 
+> **As-built (2026-06-03 · `Demo Ready`).** Implemented in `worker/`. Workers
+> (debian:sid-slim + Node 22 + wasmtime, Docker) replicate the OrbitDB job queue,
+> verify each job's Ed25519 signature, confirm the submitter is in the replicated
+> registry (waiting out a re-sync grace before rejecting), claim the job (claims
+> log + deterministic tiebreak), execute it (`node` child process for JS,
+> `wasmtime` for WASM, both with a hard timeout and stdout capture), and write the
+> result to `edgecloud-results`. Submitted code is confined by the container plus
+> an iptables egress firewall (`worker/entrypoint.sh`) that blocks private/metadata
+> IPs. Full design: **`../ARCHITECTURE.md`**. Contracts: **`../02_integration_contracts.md` §0**.
+>
+> **Manual test / integration check:**
+> ```bash
+> cd worker && docker compose up --build -d   # needs NET_ADMIN; defaults dial the genesis server
+> docker logs -f edgecloud-worker             # expect: "connected to rendezvous …"
+> # from a browser at http://146.190.123.91 submit "6 * 7"; or:
+> node scripts/e2e-client.mjs http://146.190.123.91 <your-attendee-email> "6 * 7" --expect 42
+> # egress block proof:
+> docker exec edgecloud-worker curl -s -m5 -o/dev/null -w '%{http_code}\n' http://169.254.169.254/  # 000 (blocked)
+> docker exec edgecloud-worker curl -s -m10 -o/dev/null -w '%{http_code}\n' https://example.com/      # 200
+> ```
+> Verified end-to-end on the live network: exactly one worker executes a job;
+> killing the claim winner mid-job triggers round-1 takeover by a backup.
+
 ## 1. Status
 
-Status: `Not Started`  
+Status: `Demo Ready`  
 Owner: Steve and Maroua  
 Team: Job Execution  
-Last updated: TODO
+Last updated: 2026-06-03
 
 ---
 

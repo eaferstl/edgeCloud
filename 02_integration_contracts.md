@@ -6,15 +6,51 @@ This file defines the shared technical contracts between teams.
 
 If a team-local `spec.md` conflicts with this file, this file wins until the conflict is resolved.
 
-Do not invent final payloads here unless team leads have agreed. Use placeholders until teams define the real contracts.
+---
+
+## 0. AS-BUILT CONTRACTS (authoritative, 2026-06-03)
+
+The prototype is implemented. The concrete, running contracts are documented in
+**`ARCHITECTURE.md`** and the code under `shared/src/`. Summary:
+
+**OrbitDB databases** (names in `shared/src/constants.js`; all open-write, app-level
+Ed25519 auth; no raw emails ever stored):
+
+| DB | Type | Producer → Consumer | Payload |
+|---|---|---|---|
+| `edgecloud-registry-v1` | events | Server → Workers | `{ pubkey, emailHmac, addedAt, attestedBy, attestSig }` |
+| `edgecloud-jobs-v1` | events | Server (for browser) → Workers | job envelope (below) |
+| `edgecloud-claims-v1` | events | Worker → Workers | `{ jobId, peerId, round, ts }` |
+| `edgecloud-results-v1` | documents (`_id`=jobId) | Worker → Server → browser | result envelope (below) |
+| `edgecloud-servers-v1` | events | Server → all | `{ serverPubkey, multiaddrs, label, addedAt, endorsedBy, endorseSig }` |
+
+**Job envelope**: `{ v, jobId=sha256(zipB64), zipB64, pubkey, sig (over jobId hex),
+submittedAt, nonce }`. zip = deterministic STORE zip of `manifest.json` +
+`main.js`|`module.wasm`.
+**Manifest**: `{ v, type:"js"|"wasm", entry, args, timeoutMs, command? }`. stdout is
+the output.
+**Result**: `{ v, jobId, stdout, stderr, exitCode, ok, error, executedBy, startedAt,
+timestamp }`.
+
+**HTTP endpoints (central server)**: `POST /api/register`, `GET /api/challenge`,
+`POST /api/auth/verify`, `POST /api/jobs`, `GET /api/jobs/:id/status`,
+`GET /api/jobs/:id/result` (challenge/response-gated to the submitter),
+`GET /api/modules`, `GET /api/dbinfo`, `GET /api/status`,
+`GET /api/registry/:pubkey`, `POST /api/admin/endorse` (localhost-only).
+
+**Identity/auth**: per-user Ed25519 keypair (browser, localStorage). Per-server
+Ed25519 key attests registrations; trust chains from a genesis key via
+`edgecloud-servers`. Result access uses challenge/response signed by the user key.
+
+The placeholder tables below are retained for historical/process reference.
 
 ---
 
 ## 2. Contract status
 
-Status: `Not Started`  
+Status: `Demo Ready` (as-built; see §0 and ARCHITECTURE.md)  
 Owner: Keith / Coordination  
-Contract version: TODO  
+Contract version: 1 (2026-06-03)  
 Frozen: No  
 Frozen at: TODO  
 Approved by:

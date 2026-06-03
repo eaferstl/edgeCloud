@@ -1,0 +1,24 @@
+[Unit]
+Description=edgeCloud rendezvous server (libp2p relay + OrbitDB + HTTP bridge)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/edgecloud/server
+ExecStart=/usr/bin/node src/index.js
+EnvironmentFile=/etc/edgecloud/env
+# allow binding :80 as non-root
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+# /var/lib/edgecloud — SQLite, server key, libp2p key/datastore, OrbitDB, blocks
+StateDirectory=edgecloud
+Restart=always
+RestartSec=3
+# modest box: keep node from eating the whole 1GB
+Environment=NODE_OPTIONS=--max-old-space-size=512
+
+[Install]
+WantedBy=multi-user.target

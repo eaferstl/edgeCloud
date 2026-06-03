@@ -1,0 +1,22 @@
+// Worker configuration from environment.
+
+import path from 'node:path';
+import { GENESIS_MULTIADDRS } from '@edgecloud/shared/constants.js';
+
+export const config = {
+  dataDir: path.resolve(process.env.EDGECLOUD_DATA || './worker-data'),
+  // Rendezvous server multiaddrs (comma-separated). Defaults to the genesis
+  // server baked into shared/constants.js; RENDEZVOUS_MULTIADDR overrides.
+  rendezvous: (process.env.RENDEZVOUS_MULTIADDR
+    ? process.env.RENDEZVOUS_MULTIADDR.split(',').map((s) => s.trim()).filter(Boolean)
+    : GENESIS_MULTIADDRS),
+  // HTTP fallback for the registry-grace check (any central server).
+  httpFallback: (process.env.EDGECLOUD_HTTP_FALLBACK || 'http://146.190.123.91').replace(/\/$/, ''),
+};
+
+if (config.rendezvous.length === 0) {
+  console.error(
+    '[config] no rendezvous multiaddrs: set RENDEZVOUS_MULTIADDR=/ip4/<host>/tcp/4002/ws/p2p/<peerId>'
+  );
+  process.exit(1);
+}

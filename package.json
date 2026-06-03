@@ -1,0 +1,20 @@
+{
+  "name": "edgecloud",
+  "private": true,
+  "version": "0.1.0",
+  "description": "edgeCloud — decentralized compute demo on OrbitDB + Helia + js-libp2p",
+  "type": "module",
+  "workspaces": [
+    "shared",
+    "server",
+    "worker"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "test": "npm run test --workspaces --if-present",
+    "server": "npm run start --workspace @edgecloud/server",
+    "worker": "npm run start --workspace @edgecloud/worker"
+  }
+}

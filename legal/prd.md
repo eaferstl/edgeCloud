@@ -1,136 +1,69 @@
 # PRD: Legal
 
-## 1. Status
+## Status
 
-Status: `Not Started`  
-Owner: Legal team  
-Team: Legal  
+Status: `Not Started`
+Owner: Legal team
+Team: Legal
 Last updated: TODO
 
 ---
 
-## 2. Purpose
+## Module purpose
 
-TODO: Team to complete.
+TODO: In one short paragraph, state what Legal must make true for the shared demo.
 
-In one paragraph, describe what this team must make true for the decentralized Cloud prototype demo.
-
----
-
-## 3. Relationship to master PRD
-
-This team PRD supports:
-
-- `../00_master_prd.md`
-- `../02_integration_contracts.md`
-- `../03_demo_script.md`
-
-If this file conflicts with `../00_master_prd.md` or `../02_integration_contracts.md`, the top-level file wins until the conflict is resolved.
+This is a module PRD, not a standalone product PRD. Keep it focused on the legal/commercial language needed to present the master demo promise in `../00_master_prd.md`.
 
 ---
 
-## 4. Demo responsibility
+## Owned responsibilities
 
-TODO: Team to complete.
-
-This team is responsible for:
-
-- TODO
-- TODO
-- TODO
-
-This team is not responsible for:
-
-- TODO
-- TODO
-- TODO
+- TODO: Define approved presentation language for the demo.
+- TODO: Define prohibited or risky claims.
+- TODO: Review final demo script, README/public wording, and any slides or screenshots used externally.
 
 ---
 
-## 5. Users / consumers
+## Not owned
 
-Who depends on this team's work?
+- TODO: List product, engineering, or business decisions Legal is not making for the 2-day demo.
+- TODO: List any formal compliance, production readiness, or customer-contract work intentionally out of scope.
 
-| Consumer | What They Need | Required for Demo | Notes |
+---
+
+## Inputs and dependencies
+
+| Needed from | What Legal needs | Required for demo | Notes |
 |---|---|---|---|
 | TODO | TODO | Yes / No |  |
 
 ---
 
-## 6. Features
+## Outputs and handoffs
 
-Team should define only the features required for the demo.
-
-| ID | Feature | Priority | Status | Notes |
-|---|---|---|---|---|
-| FEAT-001 | TODO | Must | Not Started |  |
-| FEAT-002 | TODO | Should | Not Started |  |
-| FEAT-003 | TODO | Could | Not Started |  |
-
-Priority values:
-
-- `Must`: required for demo.
-- `Should`: important but not demo-blocking.
-- `Could`: nice to have.
-- `Cut`: removed from demo scope.
-
----
-
-## 7. Requirements
-
-Team must fill this in.
-
-| ID | Requirement | Priority | Status | Source / Notes |
-|---|---|---|---|---|
-| REQ-001 | TODO | Must | Not Started |  |
-| REQ-002 | TODO | Should | Not Started |  |
-| REQ-003 | TODO | Could | Not Started |  |
-
----
-
-## 8. Dependencies
-
-| Dependency | Owner | Needed For | Status | Notes |
-|---|---|---|---|---|
-| TODO | TODO | TODO | Not Started |  |
-
----
-
-## 9. Handoff to other teams
-
-What does this team provide to others?
-
-| Provided Item | Consumed By | Defined In | Status |
+| Legal provides | Consumed by | Defined in | Notes |
 |---|---|---|---|
-| TODO | TODO | `../02_integration_contracts.md` | Not Started |
+| TODO | Coordination / presenters | `../03_demo_script.md` |  |
+| TODO | All teams | `../04_decisions_risks_cuts.md` |  |
+
+Shared claims, restrictions, or presentation constraints must also be reflected in `../04_decisions_risks_cuts.md` or `../03_demo_script.md`.
 
 ---
 
-## 10. Acceptance criteria
+## Demo acceptance
 
-This team is demo-ready when:
+Legal is good enough for the demo when:
 
-- [ ] TODO
-- [ ] TODO
-- [ ] TODO
-- [ ] Relevant sections of `../02_integration_contracts.md` are current.
-- [ ] Relevant manual integration check in `spec.md` passes.
-- [ ] Known limitations are documented.
-
----
-
-## 11. Known limitations
-
-Team should document prototype limitations clearly.
-
-- TODO
-- TODO
-- TODO
+- [ ] TODO: The core presentation claim is approved or safely caveated.
+- [ ] TODO: Prohibited claims are listed for presenters and agents.
+- [ ] TODO: Demo script and public-facing wording are reviewed.
+- [ ] Relevant legal concerns are current in `../04_decisions_risks_cuts.md`.
+- [ ] The review checklist in `spec.md` passes.
 
 ---
 
-## 12. Open questions
+## Known limitations
 
-| Question | Owner | Needed By | Status | Resolution |
-|---|---|---|---|---|
-| TODO | TODO | TODO | Not Started |  |
+- TODO: Document legal review limitations for this prototype.
+- TODO: Document any compliance, customer, privacy, security, or production claims the demo must avoid.

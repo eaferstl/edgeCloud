@@ -93,6 +93,14 @@ Each team should fill out its own:
 
 Keep team docs short, concrete, and demo-oriented.
 
+Use a lightweight PRD > Spec > Code flow:
+
+1. Team `prd.md` defines the module's demo contribution, boundaries, dependencies, handoffs, acceptance checks, and limitations.
+2. Team `spec.md` translates that module PRD into a buildable handoff: approach, interfaces, data/state, likely files, and verification.
+3. Code follows the spec. If the spec does not say what to build and how to verify it, update the spec before coding.
+
+Team PRDs should not become standalone product PRDs. The master demo promise lives in `00_master_prd.md`; team PRDs describe composable modules that support it.
+
 All shared assumptions must be reflected in:
 
 ```text

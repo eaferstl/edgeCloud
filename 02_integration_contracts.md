@@ -8,6 +8,8 @@ If a team-local `spec.md` conflicts with this file, this file wins until the con
 
 Do not invent final payloads here unless team leads have agreed. Use placeholders until teams define the real contracts.
 
+Use this file to keep team modules composable. Team PRDs define each module's responsibility, team specs define local implementation, and this file defines the shared boundary where modules meet.
+
 ---
 
 ## 2. Contract status

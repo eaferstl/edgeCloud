@@ -1,136 +1,68 @@
 # PRD: Authentication
 
-## 1. Status
+## Status
 
-Status: `Not Started`  
-Owner: Kevin  
-Team: Authentication  
+Status: `Not Started`
+Owner: Kevin
+Team: Authentication
 Last updated: TODO
 
 ---
 
-## 2. Purpose
+## Module purpose
 
-TODO: Team to complete.
+TODO: In one short paragraph, state what Authentication must make true for the shared demo.
 
-In one paragraph, describe what this team must make true for the decentralized Cloud prototype demo.
-
----
-
-## 3. Relationship to master PRD
-
-This team PRD supports:
-
-- `../00_master_prd.md`
-- `../02_integration_contracts.md`
-- `../03_demo_script.md`
-
-If this file conflicts with `../00_master_prd.md` or `../02_integration_contracts.md`, the top-level file wins until the conflict is resolved.
+This is a module PRD, not a standalone product PRD. Keep it focused on Authentication's contribution to the master demo promise in `../00_master_prd.md`.
 
 ---
 
-## 4. Demo responsibility
+## Owned responsibilities
 
-TODO: Team to complete.
-
-This team is responsible for:
-
-- TODO
-- TODO
-- TODO
-
-This team is not responsible for:
-
-- TODO
-- TODO
-- TODO
+- TODO: Define the demo user/session identity behavior.
+- TODO: Define what proof of identity or session state other modules can rely on.
+- TODO: Define the minimum auth-related output needed for the demo path.
 
 ---
 
-## 5. Users / consumers
+## Not owned
 
-Who depends on this team's work?
+- TODO: List auth-adjacent work this team is not doing for the 2-day demo.
+- TODO: List any production auth, security, or account-management work intentionally out of scope.
 
-| Consumer | What They Need | Required for Demo | Notes |
+---
+
+## Inputs and dependencies
+
+| Needed from | What Authentication needs | Required for demo | Notes |
 |---|---|---|---|
 | TODO | TODO | Yes / No |  |
 
 ---
 
-## 6. Features
+## Outputs and handoffs
 
-Team should define only the features required for the demo.
-
-| ID | Feature | Priority | Status | Notes |
-|---|---|---|---|---|
-| FEAT-001 | TODO | Must | Not Started |  |
-| FEAT-002 | TODO | Should | Not Started |  |
-| FEAT-003 | TODO | Could | Not Started |  |
-
-Priority values:
-
-- `Must`: required for demo.
-- `Should`: important but not demo-blocking.
-- `Could`: nice to have.
-- `Cut`: removed from demo scope.
-
----
-
-## 7. Requirements
-
-Team must fill this in.
-
-| ID | Requirement | Priority | Status | Source / Notes |
-|---|---|---|---|---|
-| REQ-001 | TODO | Must | Not Started |  |
-| REQ-002 | TODO | Should | Not Started |  |
-| REQ-003 | TODO | Could | Not Started |  |
-
----
-
-## 8. Dependencies
-
-| Dependency | Owner | Needed For | Status | Notes |
-|---|---|---|---|---|
-| TODO | TODO | TODO | Not Started |  |
-
----
-
-## 9. Handoff to other teams
-
-What does this team provide to others?
-
-| Provided Item | Consumed By | Defined In | Status |
+| Authentication provides | Consumed by | Defined in | Notes |
 |---|---|---|---|
-| TODO | TODO | `../02_integration_contracts.md` | Not Started |
+| TODO | TODO | `../02_integration_contracts.md` |  |
+
+Shared IDs, payloads, commands, events, or statuses must also be reflected in `../02_integration_contracts.md`.
 
 ---
 
-## 10. Acceptance criteria
+## Demo acceptance
 
-This team is demo-ready when:
+Authentication is good enough for the demo when:
 
-- [ ] TODO
-- [ ] TODO
-- [ ] TODO
-- [ ] Relevant sections of `../02_integration_contracts.md` are current.
-- [ ] Relevant manual integration check in `spec.md` passes.
-- [ ] Known limitations are documented.
-
----
-
-## 11. Known limitations
-
-Team should document prototype limitations clearly.
-
-- TODO
-- TODO
-- TODO
+- [ ] TODO: A demo user/session can be created, selected, or assumed.
+- [ ] TODO: Other modules know what auth/session value to consume.
+- [ ] TODO: The demo can show or explain the auth/session step without unsupported claims.
+- [ ] Relevant contracts are current in `../02_integration_contracts.md`.
+- [ ] The implementation check in `spec.md` passes.
 
 ---
 
-## 12. Open questions
+## Known limitations
 
-| Question | Owner | Needed By | Status | Resolution |
-|---|---|---|---|---|
-| TODO | TODO | TODO | Not Started |  |
+- TODO: Document prototype-only auth limitations.
+- TODO: Document any security, privacy, or compliance claims the demo must avoid.

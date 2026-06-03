@@ -1,0 +1,1 @@
+Make sure to read through and adhere to the agents.md in this repo

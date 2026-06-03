@@ -27,7 +27,7 @@ This is a module PRD, not a standalone product PRD. Keep it focused on Authentic
 
 ## Not owned
 
-- TODO: List auth-adjacent work this team is not doing for the 2-day demo.
+- TODO: List auth-adjacent work this team is not doing for the 3-day demo.
 - TODO: List any production auth, security, or account-management work intentionally out of scope.
 
 ---

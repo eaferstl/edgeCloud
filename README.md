@@ -2,12 +2,12 @@
 
 A decentralized cloud built from everyday devices. edgeCloud provides:
 
-- **Authentication** — verifying users and devices joining the network
+- **Authentication** — persistent peer identities that sign and verify every message
 - **Device registry** — tracking the devices available to run work
 - **Job queue** — accepting and scheduling units of work
 - **Job execution** — running queued jobs on registered devices
 
-It runs on iPhones to start.
+v1 runs as Node.js worker nodes running Docker on VMs/hosts, coordinated peer-to-peer over libp2p with a shared OrbitDB device registry — no central server.
 
 ## Scaffolding sections added by agent
 
@@ -19,18 +19,18 @@ The build is organized around a 3-day sprint with several parallel teams:
 |---|---|---|
 | Authentication | Kevin | `auth/` |
 | Device Registry | Chao | `device_registry/` |
-| Job Queue | Cam and Elliot | `job_queue/` |
+| Job Queue | Cam and Eliot | `job_queue/` |
 | Job Execution | Steve and Maroua | `job_execution/` |
 | Coordination | Keith | `coordination/` |
 | Legal | Legal team | `legal/` |
 
 ## Prototype goal
 
-TODO: Coordination to finalize.
+v1 demonstrates decentralized **serverless function execution**: a user submits a containerized job, and the network schedules it to the lowest-latency capable peer, runs it in Docker, and streams the result back — coordinated peer-to-peer with no central server.
 
-At a high level, the prototype should demonstrate a decentralized Cloud workflow involving:
+The end-to-end workflow spans:
 
-- user/session identity,
+- node/peer identity and signing,
 - device registration,
 - job submission,
 - job queueing,
@@ -50,9 +50,10 @@ Start here:
 1. `00_master_prd.md` - overall prototype scope and demo promise.
 2. `01_top_level_tasks.md` - current task list, blockers, cuts, and status.
 3. `02_integration_contracts.md` - shared interface contracts between teams.
-4. `03_demo_script.md` - planned live demo flow.
-5. `04_decisions_risks_cuts.md` - decisions, risks, cuts, and blockers.
-6. Team folders - local PRDs/specs.
+4. `docs/architecture.md` - shared technical architecture: schemas, stack, protocols, constants.
+5. `03_demo_script.md` - planned live demo flow.
+6. `04_decisions_risks_cuts.md` - decisions, risks, cuts, and blockers.
+7. Team folders - local PRDs/specs.
 
 ---
 
@@ -66,6 +67,8 @@ Start here:
 6. `03_demo_script.md` defines the live presentation path.
 7. `04_decisions_risks_cuts.md` records decisions, risks, cuts, and blockers.
 8. `legal/spec.md` governs legal/commercial presentation language.
+
+Technical reference: `docs/architecture.md` holds the canonical schemas, stack, protocols, and constants. It is the technical source of truth; ratified shared contracts are recorded and frozen in `02_integration_contracts.md`.
 
 ---
 

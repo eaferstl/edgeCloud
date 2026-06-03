@@ -11,7 +11,7 @@ Last updated: TODO
 
 ## Purpose and sources
 
-TODO: Describe the buildable Authentication approach for the 2-day demo.
+TODO: Describe the buildable Authentication approach for the 3-day demo.
 
 This spec translates:
 
@@ -37,17 +37,21 @@ If this spec does not explain what to build and how to verify it, improve this s
 
 All shared IDs, payloads, commands, events, and statuses must also appear in `../02_integration_contracts.md`.
 
+Canonical shapes: `../docs/architecture.md` §6. This team owns Contract #2.
+
 ### Consumed
 
 | Input / service | Provided by | Required for demo | Notes |
 |---|---|---|---|
-| TODO | TODO | Yes / No |  |
+| Persisted Ed25519 key / `PeerId` | libp2p (Coordination bootstrap) | Yes | identity = node key (arch §6) |
 
 ### Provided
 
 | Output / service | Consumed by | Required for demo | Notes |
 |---|---|---|---|
-| TODO | TODO | Yes / No |  |
+| `sign(payload)` → base64 signature | All teams | Yes | API-001 (arch §6) |
+| `verify(payload, signature, peerId)` + error contract | All teams | Yes | API-002; `false` ⇒ drop & don't act (arch §6) |
+| `canonicalJSON(payload)` | All teams | Yes | shared canonicalization (arch §6) |
 
 ---
 

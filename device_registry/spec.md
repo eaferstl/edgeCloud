@@ -11,7 +11,7 @@ Last updated: TODO
 
 ## Purpose and sources
 
-TODO: Describe the buildable Device Registry approach for the 2-day demo.
+TODO: Describe the buildable Device Registry approach for the 3-day demo.
 
 This spec translates:
 
@@ -39,17 +39,21 @@ Current implementation note: `device_registry/index.js` is an existing registry 
 
 All shared IDs, payloads, commands, events, and statuses must also appear in `../02_integration_contracts.md`.
 
+Canonical shapes: `../docs/architecture.md` §7.1. This team owns Contract #1.
+
 ### Consumed
 
 | Input / service | Provided by | Required for demo | Notes |
 |---|---|---|---|
-| TODO | TODO | Yes / No |  |
+| libp2p transport + discovery (DNS bootstrap + mDNS) | Coordination | Yes | arch §2–3 |
+| `sign` / `verify` | Authentication | Yes | sign device docs; readers verify (arch §6) |
+| Capacity write-backs (`currentLoad` / `availableCapacity` / `status`) | Job Execution | Yes | Execution updates this node's own doc (Contract #4) |
 
 ### Provided
 
 | Output / service | Consumed by | Required for demo | Notes |
 |---|---|---|---|
-| TODO: Device availability record | Job Queue / Job Execution | Yes / No | Reflect final fields in contracts. |
+| `device-registry` device document (signed) | Job Queue, Job Execution | Yes | schema arch §7.1; Contract #1 |
 
 ---
 

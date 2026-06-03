@@ -28,10 +28,10 @@ Do not pre-fill completion. Team leads should update this during the build.
 | ID | Task | Owner | Team | Status | Blocked By | Due | Notes |
 |---|---|---|---|---|---|---|---|
 | T-001 | Finalize master PRD | Keith | Coordination | Not Started |  | TODO |  |
-| T-002 | Define first version of integration contracts | Keith + team leads | Coordination | Not Started | Team review | TODO |  |
+| T-002 | Define first version of integration contracts | Keith + team leads | Coordination | Building | Team review | TODO | v0.1 draft populated from `docs/architecture.md`; awaiting team ratification + freeze |
 | T-003 | Define Authentication requirements | Kevin | Authentication | Not Started |  | TODO |  |
 | T-004 | Define Device Registry requirements | Chao | Device Registry | Not Started |  | TODO |  |
-| T-005 | Define Job Queue requirements | Cam / Elliot | Job Queue | Not Started |  | TODO |  |
+| T-005 | Define Job Queue requirements | Cam / Eliot | Job Queue | Not Started |  | TODO |  |
 | T-006 | Define Job Execution requirements | Steve / Maroua | Job Execution | Not Started |  | TODO |  |
 | T-007 | Define Legal review requirements | Legal | Legal | Not Started |  | TODO |  |
 | T-008 | Run first integration check | Keith + team leads | Coordination | Not Started | Team readiness | TODO |  |
@@ -59,11 +59,11 @@ Do not pre-fill completion. Team leads should update this during the build.
 |---|---|---|---|
 | DEV-001 | Fill out `device_registry/prd.md` | Not Started |  |
 | DEV-002 | Fill out `device_registry/spec.md` | Not Started |  |
-| DEV-003 | Define device registration behavior | Not Started |  |
+| DEV-003 | Define device registration behavior | Building | `index.js` aligned to architecture (D-001…D-008); see registry punch-list in `docs/architecture.md` §15 |
 | DEV-004 | Define manual integration check | Not Started |  |
 | DEV-005 | Integrate with Job Queue or Job Execution | Not Started |  |
 
-### Job Queue - Cam and Elliot
+### Job Queue - Cam and Eliot
 
 | ID | Task | Status | Notes |
 |---|---|---|---|
@@ -111,7 +111,7 @@ Do not pre-fill completion. Team leads should update this during the build.
 
 | ID | Blocker | Owner | Impact | Needed Decision / Action | Status |
 |---|---|---|---|---|---|
-| B-001 | TODO | TODO | TODO | TODO | Not Started |
+| B-001 | Auth module (`sign` / `verify`) unimplemented | Kevin / Authentication | All signed paths; nothing reaches Demo Ready (decision D-006) | Implement `auth/` per `docs/architecture.md` §6 | Blocked |
 
 ---
 

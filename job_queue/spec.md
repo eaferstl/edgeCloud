@@ -3,7 +3,7 @@
 ## Status
 
 Status: `Not Started`
-Owner: Cam / Elliot
+Owner: Cam / Eliot
 Team: Job Queue
 Last updated: TODO
 
@@ -11,7 +11,7 @@ Last updated: TODO
 
 ## Purpose and sources
 
-TODO: Describe the buildable Job Queue approach for the 2-day demo.
+TODO: Describe the buildable Job Queue approach for the 3-day demo.
 
 This spec translates:
 
@@ -39,17 +39,22 @@ Research reminder: for the prototype, avoid unsupported strict FIFO or exactly-o
 
 All shared IDs, payloads, commands, events, and statuses must also appear in `../02_integration_contracts.md`.
 
+Canonical shapes: `../docs/architecture.md` §7.2, §8. This team co-owns Contract #3.
+
 ### Consumed
 
 | Input / service | Provided by | Required for demo | Notes |
 |---|---|---|---|
-| TODO | TODO | Yes / No |  |
+| `device-registry` documents (local replica) | Device Registry | Yes | fitness inputs (Contract #1; arch §7.1, §8) |
+| `sign` / `verify` | Authentication | Yes | sign JobOffer; verify responses/results |
+| JobResponse / JobResult | Job Execution | Yes | over `/edgecloud/jobs/1.0.0` (Contract #3) |
 
 ### Provided
 
 | Output / service | Consumed by | Required for demo | Notes |
 |---|---|---|---|
-| TODO | TODO | Yes / No |  |
+| JobOffer over `/edgecloud/jobs/1.0.0` | Job Execution | Yes | arch §7.2; Contract #3 |
+| Job status (`queued`…`completed` / `failed`) | Coordination / demo | Yes | arch §9.2 |
 
 ---
 

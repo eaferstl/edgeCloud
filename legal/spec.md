@@ -11,7 +11,7 @@ Last updated: TODO
 
 ## Purpose and sources
 
-TODO: Describe the reviewable Legal approach for the 2-day demo.
+TODO: Describe the reviewable Legal approach for the 3-day demo.
 
 This spec translates:
 

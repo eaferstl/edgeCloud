@@ -27,7 +27,7 @@ This is a module PRD, not a standalone product PRD. Keep it focused on Device Re
 
 ## Not owned
 
-- TODO: List registry-adjacent work this team is not doing for the 2-day demo.
+- TODO: List registry-adjacent work this team is not doing for the 3-day demo.
 - TODO: List any production fleet management, trust, or monitoring work intentionally out of scope.
 
 ---

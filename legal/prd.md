@@ -27,7 +27,7 @@ This is a module PRD, not a standalone product PRD. Keep it focused on the legal
 
 ## Not owned
 
-- TODO: List product, engineering, or business decisions Legal is not making for the 2-day demo.
+- TODO: List product, engineering, or business decisions Legal is not making for the 3-day demo.
 - TODO: List any formal compliance, production readiness, or customer-contract work intentionally out of scope.
 
 ---

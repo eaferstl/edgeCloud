@@ -27,7 +27,7 @@ This is a module PRD, not a standalone product PRD. Keep it focused on Job Execu
 
 ## Not owned
 
-- TODO: List execution-adjacent work this team is not doing for the 2-day demo.
+- TODO: List execution-adjacent work this team is not doing for the 3-day demo.
 - TODO: List any production sandboxing, arbitrary code execution, or workload isolation intentionally out of scope.
 
 ---

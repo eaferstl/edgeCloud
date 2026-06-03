@@ -11,7 +11,7 @@ Last updated: TODO
 
 ## Purpose and sources
 
-TODO: Describe the buildable Job Execution approach for the 2-day demo.
+TODO: Describe the buildable Job Execution approach for the 3-day demo.
 
 This spec translates:
 
@@ -37,17 +37,22 @@ If this spec does not explain what to build and how to verify it, improve this s
 
 All shared IDs, payloads, commands, events, and statuses must also appear in `../02_integration_contracts.md`.
 
+Canonical shapes: `../docs/architecture.md` §7.3–7.4, §10. This team co-owns Contract #3 and owns Contract #4.
+
 ### Consumed
 
 | Input / service | Provided by | Required for demo | Notes |
 |---|---|---|---|
-| TODO | TODO | Yes / No |  |
+| JobOffer over `/edgecloud/jobs/1.0.0` | Job Queue | Yes | arch §7.2; Contract #3 |
+| `sign` / `verify` | Authentication | Yes | verify offers; sign responses/results |
+| Own `device-registry` document | Device Registry | Yes | reads/updates own capacity |
 
 ### Provided
 
 | Output / service | Consumed by | Required for demo | Notes |
 |---|---|---|---|
-| TODO | TODO | Yes / No |  |
+| JobResponse + JobResult | Job Queue (submitter) | Yes | arch §7.3–7.4; Contract #3 |
+| Capacity write-backs to own device doc | Device Registry | Yes | Contract #4 (arch §10) |
 
 ---
 

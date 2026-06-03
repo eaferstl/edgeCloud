@@ -20,6 +20,7 @@ Use this file to prevent repeated debates and to help future agents understand w
 | D-006 | Emails never enter OrbitDB; only `HMAC-SHA256(email, SHARED_SALT)` | Steve | 2026-06-03 | Protect attendee PII while still enforcing ≤4 keys/email across servers | `server/src/db.js`, `shared/src/trust.js` |
 | D-007 | Multiple interchangeable central servers; trust chain from a genesis key | Steve | 2026-06-03 | Avoid over-centralization; servers hold no unique durable state | `shared/src/trust.js`, `server/src/endorse-server.js` |
 | D-008 | Worker egress firewall: iptables blocks private/metadata IPs (NET_ADMIN) | Steve | 2026-06-03 | Submitted code must not reach the host LAN or cloud metadata; the container is the sandbox | `worker/entrypoint.sh` |
+| D-009 | Enrich worker heartbeat with a device capability record (adapted from chaodoze's device registry); keep it on gossipsub, not OrbitDB | Steve | 2026-06-03 | Incorporate Chao's device-schema/metadata-collector work (CPU/RAM/storage + live capacity) and wire `currentLoad` to real execution, while preserving the decision to keep high-churn presence off the CRDT (D-001 rationale). See `CREDITS.md` | `worker/src/device-info.js`, `worker/src/coordination.js`, `server/src/heartbeats.js` |
 
 ---
 

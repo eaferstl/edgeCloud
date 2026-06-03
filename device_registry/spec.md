@@ -1,20 +1,38 @@
 # Spec: Device Registry
 
-> **As-built (2026-06-03 · `Demo Ready`, lightweight).** Worker "devices" are not
-> pre-registered; a device joins simply by running the worker container, which dials
-> the rendezvous relay and begins replicating the OrbitDB databases. Liveness is
-> tracked via a gossipsub presence heartbeat (`edgecloud/heartbeat/v1`, every 5 s,
-> evicted after 15 s) that the server surfaces at `GET /api/status`
-> (`workersOnline` / `workers`). This presence view is **UI-only** — execution
-> coordination uses the claims log, not the heartbeat, so the registry is not a
-> correctness dependency. Worker identity (libp2p peerId) is persisted on the
-> container's `/data` volume so a device keeps its ID across restarts. Code:
-> `server/src/heartbeats.js`, `worker/src/index.js`. Full design: **`../ARCHITECTURE.md`**.
+> **As-built (2026-06-03 · `Demo Ready`).** Worker "devices" are not pre-registered;
+> a device joins simply by running the worker container, which dials the rendezvous
+> relay and begins replicating the OrbitDB databases. Each worker publishes a
+> **device capability + liveness record** every 5 s over the gossipsub presence
+> topic (`edgecloud/heartbeat/v1`, evicted after 15 s): `peerId`, `hostname`,
+> `cpu {model, cores, arch, platform, load1m}`, `ram {totalBytes, freeBytes}`,
+> `storage {totalBytes, freeBytes}`, and live scheduling state
+> `{ status, maxConcurrent, currentLoad, availableCapacity }`. `currentLoad` tracks
+> **actual running executions** (incremented while a job runs), so
+> `availableCapacity` is real. The server surfaces all of this at `GET /api/status`
+> (`devices[]`, `fleetAvailableCapacity`) and the webform shows it.
+>
+> This presence view is **scheduling-advisory / UI only** — execution coordination
+> uses the claims log, not the heartbeat, so the registry is not a correctness
+> dependency. Worker identity (libp2p peerId) persists on the `/data` volume.
+>
+> **Attribution.** The device-record schema and the host-metadata collectors
+> (`cpu`/`ram`/`storage`, `status`/`maxConcurrent`/`currentLoad`/`availableCapacity`,
+> the reserved `pricePerJobUsd`) are adapted from **Chao Lam's (`chaodoze`)**
+> standalone OrbitDB device registry (`device_registry/index.js` on `origin/main`,
+> incl. his "assuming DNS availability" commit) and the device schema **D-A**
+> ratified in eaferstl's "architectural consistency" pass. We carry his design onto
+> our gossipsub presence channel (rather than his OrbitDB documents DB, because
+> edgeCloud deliberately keeps high-churn presence off the CRDT oplog) and wire his
+> live-capacity fields to real execution. Code: `worker/src/device-info.js`,
+> `worker/src/coordination.js`, `server/src/heartbeats.js`. See `../CREDITS.md`.
 >
 > **Manual test / integration check:**
 > ```bash
 > cd worker && docker compose up --build -d        # start a device
-> curl -s http://146.190.123.91/api/status         # workersOnline increments; peerId listed in "workers"
+> curl -s http://146.190.123.91/api/status | python3 -m json.tool   # devices[] shows cpu/ram/storage/capacity
+> # submit a slow job and watch currentLoad rise then fall:
+> #   currentLoad 0→1 during execution, availableCapacity 4→3, then back
 > docker stop edgecloud-worker                      # within ~15s it drops off the status list
 > ```
 

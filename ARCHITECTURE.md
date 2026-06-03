@@ -111,8 +111,15 @@ strategy that keeps duplicates near-zero and harmless (`worker/src/coordination.
 6. Results are idempotent by jobId, so a rare double-execution collapses to one
    record.
 
-Worker presence (gossipsub heartbeat, `edgecloud/heartbeat/v1`) is **UI-only** — the
-claim set itself is the candidate set, so correctness doesn't depend on it.
+Worker presence (gossipsub heartbeat, `edgecloud/heartbeat/v1`) is
+**scheduling-advisory / UI-only** — the claim set itself is the candidate set, so
+correctness doesn't depend on it. Each heartbeat carries a **device capability
+record** (CPU/RAM/storage + live `status`/`maxConcurrent`/`currentLoad`/
+`availableCapacity`); `currentLoad` tracks real running executions. This schema is
+adapted from Chao Lam's (`chaodoze`) device registry — see
+[`CREDITS.md`](CREDITS.md) — carried onto the gossipsub channel (not an OrbitDB
+documents DB) to keep high-churn presence off the CRDT oplog.
+`worker/src/device-info.js`, `server/src/heartbeats.js`.
 
 ## Auth & privacy
 

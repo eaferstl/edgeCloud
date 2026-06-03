@@ -158,6 +158,8 @@ export function createApp({ q, auth, databases, indexers, heartbeats, serverKey,
     res.json({
       workersOnline: heartbeats.count(),
       workers: heartbeats.online(),
+      devices: heartbeats.devices(), // capability records (cpu/ram/storage/capacity)
+      fleetAvailableCapacity: heartbeats.totalAvailableCapacity(),
       registeredKeys: q.registeredKeyCount(),
       allowlistedEmails: q.allowlistCount(),
       cachedResults: q.cachedResultCount(),

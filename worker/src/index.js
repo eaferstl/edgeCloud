@@ -15,6 +15,7 @@ import { config } from './config.js';
 import { createWorkerLibp2p } from './libp2p-node.js';
 import { createRegistryVerifier } from './registry-verify.js';
 import { createCoordinator } from './coordination.js';
+import { buildDeviceRecord } from './device-info.js';
 
 async function main() {
   console.log(`[boot] edgeCloud worker starting (data: ${config.dataDir})`);
@@ -37,7 +38,7 @@ async function main() {
   await registry.rebuild();
   registry.follow();
 
-  const coordinator = createCoordinator({ databases, registry, peerId });
+  const coordinator = createCoordinator({ databases, registry, peerId, maxConcurrent: config.maxConcurrent });
   coordinator.follow();
   // give initial head-sync a moment, then work through any backlog
   setTimeout(() => coordinator.scanBacklog().catch(() => {}), 8000);
@@ -52,12 +53,21 @@ async function main() {
       .catch(() => {});
   }, 30000).unref();
 
-  // presence heartbeat (UI only)
-  setInterval(() => {
-    libp2p.services.pubsub
-      .publish(TOPIC_HEARTBEAT, new TextEncoder().encode(JSON.stringify({ peerId, ts: Date.now() })))
-      .catch(() => {});
-  }, HEARTBEAT_INTERVAL_MS);
+  // presence heartbeat: a device capability + liveness record (schema adapted
+  // from chaodoze's device registry). Carries CPU/RAM/storage and live
+  // scheduling capacity so the server can show real device info and, later,
+  // route to the least-loaded node. Still UI/scheduling-advisory only — the
+  // claim protocol does not depend on it.
+  const publishHeartbeat = async () => {
+    try {
+      const record = await buildDeviceRecord(peerId, coordinator.live);
+      await libp2p.services.pubsub.publish(TOPIC_HEARTBEAT, new TextEncoder().encode(JSON.stringify(record)));
+    } catch {
+      /* transient pubsub/metadata error; next tick retries */
+    }
+  };
+  publishHeartbeat();
+  setInterval(publishHeartbeat, HEARTBEAT_INTERVAL_MS);
 
   // keep the rendezvous connection alive
   setInterval(() => dialRendezvous(libp2p, true).catch(() => {}), 30000);

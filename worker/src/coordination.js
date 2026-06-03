@@ -23,8 +23,20 @@ import { executeJob } from './executor/run.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export function createCoordinator({ databases, registry, peerId, log = console.log }) {
+export function createCoordinator({ databases, registry, peerId, maxConcurrent = 4, log = console.log }) {
   const inFlight = new Set();
+
+  // Live scheduling state, published in each heartbeat (device schema D-A,
+  // from chaodoze's registry). Unlike his placeholder, currentLoad here tracks
+  // ACTUAL running executions: bumped in executeAndPublish, restored on finish.
+  const live = {
+    status: 'available', // "available" | "draining" | "offline"
+    maxConcurrent,
+    currentLoad: 0,
+    get availableCapacity() {
+      return Math.max(0, this.maxConcurrent - this.currentLoad);
+    },
+  };
 
   async function handleJob(env) {
     if (!env || typeof env.jobId !== 'string') return;
@@ -91,15 +103,20 @@ export function createCoordinator({ databases, registry, peerId, log = console.l
   }
 
   async function executeAndPublish(env, jid, short) {
-    const r = await executeJob(env);
-    // last-moment dedup: someone may have raced us
-    if (await getResultDoc(databases.results, jid)) {
-      log(`[job ${short}] executed but a result already replicated; discarding duplicate`);
-      return;
+    live.currentLoad++; // reflected in the next heartbeat's availableCapacity
+    try {
+      const r = await executeJob(env);
+      // last-moment dedup: someone may have raced us
+      if (await getResultDoc(databases.results, jid)) {
+        log(`[job ${short}] executed but a result already replicated; discarding duplicate`);
+        return;
+      }
+      const result = buildResult({ ...r, jobId: jid, executedBy: peerId });
+      await databases.results.put({ _id: jid, ...result });
+      log(`[job ${short}] result published (exit ${result.exitCode}, ${result.stdout.length}B stdout)`);
+    } finally {
+      live.currentLoad = Math.max(0, live.currentLoad - 1);
     }
-    const result = buildResult({ ...r, jobId: jid, executedBy: peerId });
-    await databases.results.put({ _id: jid, ...result });
-    log(`[job ${short}] result published (exit ${result.exitCode}, ${result.stdout.length}B stdout)`);
   }
 
   async function scanBacklog() {
@@ -115,5 +132,5 @@ export function createCoordinator({ databases, registry, peerId, log = console.l
     });
   }
 
-  return { handleJob, scanBacklog, follow };
+  return { handleJob, scanBacklog, follow, live };
 }

@@ -12,6 +12,10 @@ export const config = {
     : GENESIS_MULTIADDRS),
   // HTTP fallback for the registry-grace check (any central server).
   httpFallback: (process.env.EDGECLOUD_HTTP_FALLBACK || 'http://146.190.123.91').replace(/\/$/, ''),
+  // Max simultaneous jobs this node advertises (seeds availableCapacity; from
+  // chaodoze's EDGECLOUD_MAX_CONCURRENT). The claim protocol does not yet gate
+  // on this — it's advertised for display and future least-loaded routing.
+  maxConcurrent: Number(process.env.EDGECLOUD_MAX_CONCURRENT) || 4,
 };
 
 if (config.rendezvous.length === 0) {

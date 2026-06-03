@@ -408,16 +408,31 @@ function renderHistory() {
 }
 
 // --- network status pill ---
+function gb(b) { return (b == null) ? '?' : (b / 1e9).toFixed(1) + ' GB'; }
+
 async function refreshStatus() {
   try {
     var s = await (await fetch('/api/status')).json();
     var el = $('netStatus');
     el.classList.add('online');
-    el.textContent = s.workersOnline + ' worker node' + (s.workersOnline === 1 ? '' : 's') + ' online · ' +
-      s.registeredKeys + ' keys registered';
+    var cap = s.fleetAvailableCapacity != null ? ' · ' + s.fleetAvailableCapacity + ' free slots' : '';
+    el.textContent = s.workersOnline + ' worker node' + (s.workersOnline === 1 ? '' : 's') + ' online' + cap +
+      ' · ' + s.registeredKeys + ' keys';
+    // Hover/title shows each device's specs (CPU cores, free RAM/disk, capacity).
+    if (s.devices && s.devices.length) {
+      el.title = s.devices.map(function (d) {
+        var c = d.cpu || {};
+        return (d.hostname || d.peerId.slice(0, 8)) + ': ' + (c.cores || '?') + ' core ' + (c.arch || '') +
+          ', RAM ' + gb(d.ram && d.ram.freeBytes) + ' free, disk ' + gb(d.storage && d.storage.freeBytes) +
+          ' free, capacity ' + (d.availableCapacity != null ? d.availableCapacity : '?') + '/' + (d.maxConcurrent || '?');
+      }).join('\n');
+    } else {
+      el.title = '';
+    }
   } catch (e) {
     $('netStatus').classList.remove('online');
     $('netStatus').textContent = 'server unreachable';
+    $('netStatus').title = '';
   }
 }
 

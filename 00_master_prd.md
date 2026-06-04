@@ -84,12 +84,12 @@ Do not treat this list as final. Team leads and Legal should refine it.
 
 | Team | Lead / Owner | Folder | Responsibility |
 |---|---|---|---|
-| Authentication | Kevin | `auth/` | TODO |
-| Device Registry | Chao | `device_registry/` | TODO |
-| Job Queue | Cam and Elliot | `job_queue/` | TODO |
-| Job Execution | Steve and Maroua | `job_execution/` | TODO |
-| Coordination | Keith | `coordination/` | TODO |
-| Legal | Legal team | `legal/` | TODO |
+| Authentication | Kevin | `auth/` | Persist node identity (Ed25519 PeerId); provide `sign` / `verify` / `canonicalJSON` for all payloads. |
+| Device Registry | Chao | `device_registry/` | Discover peers; maintain each node's signed device document (specs + live capacity) in OrbitDB. |
+| Job Queue | Cam and Eliot | `job_queue/` | Score candidate workers from the registry; offer jobs over libp2p; track job status. |
+| Job Execution | Steve and Maroua | `job_execution/` | Accept/reject offers; run jobs in Docker; stream results; write capacity back to the registry. |
+| Coordination | Keith | `coordination/` | Wire each node (libp2p + OrbitDB + modules); own shared constants, the demo path, and these docs. |
+| Legal | Legal team | `legal/` | Approve presentation language; define prohibited claims. |
 
 ---
 
@@ -114,15 +114,18 @@ TODO: Team leads to confirm.
 Draft flow to refine:
 
 ```text
-User/session setup
-  -> device registration
-  -> job submission
-  -> queueing
-  -> assignment or claiming
-  -> execution
-  -> result/status reporting
-  -> demo display
+Node boot + persisted identity (Auth)
+  -> peer discovery (DNS bootstrap + mDNS)
+  -> device registration in OrbitDB (Device Registry)
+  -> job submission as a signed JobOffer (Job Queue)
+  -> candidate scoring from the registry replica (Job Queue)
+  -> direct libp2p offer to best worker; accept/reject (Job Queue <-> Job Execution)
+  -> Docker execution + capacity write-back (Job Execution -> Device Registry)
+  -> signed result streamed to submitter (Job Execution)
+  -> result verified + displayed (Job Queue / Coordination)
 ```
+
+Detailed step-by-step flow and payloads: `docs/architecture.md` §10.
 
 ---
 

@@ -1,177 +1,108 @@
 # Spec: Coordination
 
-## 1. Status
+## Status
 
-Status: `Not Started`  
-Owner: Keith  
-Team: Coordination  
+Status: `Not Started`
+Owner: Keith
+Team: Coordination
 Last updated: TODO
 
 ---
 
-## 2. Purpose
+## Purpose and sources
 
-TODO: Team to complete.
+TODO: Describe the buildable Coordination approach for the 3-day demo.
 
-Describe what this spec defines.
-
-This spec should support:
+This spec translates:
 
 - `prd.md`
 - `../00_master_prd.md`
+- `../01_top_level_tasks.md`
 - `../02_integration_contracts.md`
 - `../03_demo_script.md`
+- `../04_decisions_risks_cuts.md`
+
+If this spec does not explain what to coordinate and how to verify it, improve this spec before implementation or demo-prep work.
 
 ---
 
-## 3. Scope
+## Implementation approach
 
-### In scope
-
-- TODO
-- TODO
-- TODO
-
-### Out of scope
-
-- TODO
-- TODO
-- TODO
+- What we are building/coordinating: TODO
+- Simplest demo path: TODO
+- Assumptions: TODO
+- Intentionally not building: TODO
 
 ---
 
-## 4. Requirements covered
+## Interfaces and contracts
 
-Link this spec back to requirements in `prd.md`.
+All shared IDs, payloads, commands, events, and statuses must also appear in `../02_integration_contracts.md`.
 
-| Requirement ID | How this spec addresses it | Status |
+### Consumed
+
+| Input / service | Provided by | Required for demo | Notes |
+|---|---|---|---|
+| TODO | TODO | Yes / No |  |
+
+### Provided
+
+| Output / service | Consumed by | Required for demo | Notes |
+|---|---|---|---|
+| TODO: Demo path | All teams | Yes | Keep aligned with `../03_demo_script.md`. |
+| TODO: Integration status | All teams | Yes | Keep aligned with `../01_top_level_tasks.md`. |
+
+---
+
+## Data and state
+
+| Field / value | Type | Owner | Notes |
+|---|---|---|---|
+| TODO | TODO | Coordination |  |
+
+| State | Meaning | Next states | Notes |
+|---|---|---|---|
+| Not Started | Work has not begun. | Building / Cut | Shared status value. |
+| Building | Work is underway. | Blocked / Integrated / Cut | Shared status value. |
+| Blocked | Work needs a decision or dependency. | Building / Cut | Shared status value. |
+| Integrated | Work is connected to at least one dependent module. | Demo Ready / Building / Cut | Shared status value. |
+| Demo Ready | Work is ready for rehearsal/demo. | Building / Cut | Shared status value. |
+| Cut | Work is removed from demo scope. | Building | Requires recorded decision. |
+
+---
+
+## Error cases and fallback
+
+| Case | Expected behavior | Demo impact | Notes |
+|---|---|---|---|
+| TODO | TODO | TODO |  |
+
+---
+
+## Likely files or modules
+
+| Path | Expected change | Notes |
 |---|---|---|
-| REQ-001 | TODO | Not Started |
-| REQ-002 | TODO | Not Started |
+| `../00_master_prd.md` | Keep overall demo promise current. | Master authority. |
+| `../01_top_level_tasks.md` | Keep status, blockers, and cuts current. | Execution tracker. |
+| `../02_integration_contracts.md` | Keep shared interfaces current. | Contract authority. |
+| `../03_demo_script.md` | Keep presenter path aligned to reality. | Do not overpromise. |
+| `../04_decisions_risks_cuts.md` | Record material decisions, risks, and cuts. | Prevent repeated debates. |
 
 ---
 
-## 5. Design / implementation approach
+## What an implementer needs before coding or demo-prep work
 
-TODO: Team to complete.
-
-Keep this practical and prototype-focused.
-
-Questions to answer:
-
-- What are we building for the demo?
-- What is the simplest implementation that satisfies the PRD?
-- What are we intentionally not building?
-- What assumptions are we making?
-- What needs to be stable for other teams?
+- [ ] Coordination PRD has enough detail for the demo.
+- [ ] Relevant shared contracts are current in `../02_integration_contracts.md`.
+- [ ] Inputs, outputs, and demo acceptance checks are clear.
+- [ ] Verification steps below are runnable by another person or agent.
 
 ---
 
-## 6. Interfaces
+## Verification
 
-Document anything other teams need to call, consume, provide, or depend on.
-
-All shared contracts must also be reflected in `../02_integration_contracts.md`.
-
-### Interfaces consumed
-
-| Interface / Data / Service | Provided By | Required for Demo | Notes |
-|---|---|---|---|
-| TODO | TODO | Yes / No |  |
-
-### Interfaces provided
-
-| Interface / Data / Service | Consumed By | Required for Demo | Notes |
-|---|---|---|---|
-| TODO | TODO | Yes / No |  |
-
----
-
-## 7. API / events / commands
-
-Do not invent APIs before the team decides them. Fill this in when known.
-
-| ID | Name | Type | Consumer | Status | Notes |
-|---|---|---|---|---|---|
-| API-001 | TODO | HTTP / CLI / Event / Other | TODO | Not Started |  |
-
-Example format, if needed:
-
-```http
-TODO METHOD /path
-```
-
-Request:
-
-```json
-{
-  "TODO": "TODO"
-}
-```
-
-Response:
-
-```json
-{
-  "TODO": "TODO"
-}
-```
-
----
-
-## 8. Data model
-
-Do not invent final fields. Fill this in when known.
-
-| Field | Type | Required | Owner | Notes |
-|---|---|---:|---|---|
-| TODO | TODO | TODO | TODO | TODO |
-
----
-
-## 9. State / lifecycle
-
-If this subsystem has statuses or lifecycle states, define them here and mirror shared states in `../02_integration_contracts.md`.
-
-| State | Meaning | Next States | Notes |
-|---|---|---|---|
-| TODO | TODO | TODO | TODO |
-
----
-
-## 10. Error cases
-
-| Case | Expected Behavior | Visible in Demo? | Notes |
-|---|---|---|---|
-| TODO | TODO | Yes / No |  |
-
----
-
-## 11. Security / privacy / safety considerations
-
-TODO: Team to complete.
-
-Do not make production claims unless confirmed.
-
-Questions to answer:
-
-- What data does this component handle?
-- What should not be logged?
-- What assumptions are prototype-only?
-- What would need to change for production?
-- Does Legal need to review any claim related to this component?
-
----
-
-## 12. Manual test / integration check
-
-Every team must provide a way for another team or future agent to verify the subsystem.
-
-### Manual check
-
-TODO: Team to complete.
-
-Steps:
+Manual check:
 
 ```bash
 # TODO
@@ -183,73 +114,16 @@ Expected result:
 TODO
 ```
 
-### Integration check
-
-This subsystem is integrated when:
+Integration check:
 
 - [ ] TODO
-- [ ] TODO
-- [ ] At least one other team has successfully consumed or provided the relevant interface.
-- [ ] Any shared contract changes are reflected in `../02_integration_contracts.md`.
+- [ ] The demo script matches actual implementation.
+- [ ] Relevant tasks, risks, or cuts are updated in top-level docs.
 
 ---
 
-## 13. Demo readiness checklist
+## Open questions and cuts
 
-- [ ] Required features are implemented or explicitly cut.
-- [ ] Required interfaces are documented.
-- [ ] Manual test passes.
-- [ ] Integration check passes.
-- [ ] Known limitations are documented.
-- [ ] Relevant top-level tasks are updated in `../01_top_level_tasks.md`.
-- [ ] Relevant risks or cuts are recorded in `../04_decisions_risks_cuts.md`.
-
----
-
-## 14. Open questions
-
-| Question | Owner | Needed By | Status | Resolution |
-|---|---|---|---|---|
-| TODO | TODO | TODO | Not Started |  |
-
----
-
-## 15. Operating rhythm
-
-Keith / Coordination to complete.
-
-| Time / Checkpoint | Goal | Required Output | Status |
+| Item | Owner | Decision needed | Status |
 |---|---|---|---|
-| Day 1 kickoff | Align scope | Master PRD accepted | Not Started |
-| Day 1 contract review | Align interfaces | Integration contracts v0 | Not Started |
-| Day 2 integration check | Force end-to-end progress | First integrated path attempt | Not Started |
-| Day 3 rehearsal | Stabilize presentation | Full demo rehearsal | Not Started |
-| Final presentation prep | Prepare fallback | Recording/trace/screenshots | Not Started |
-
----
-
-## 16. Scope control rules
-
-Coordination to complete.
-
-Suggested rules to consider:
-
-- Cut work that is not required for the demo promise.
-- Cut work that creates a new cross-team dependency after contract freeze.
-- Cut work that cannot be tested before rehearsal.
-- Cut work that creates legal or presentation ambiguity.
-- Do not expand from prototype to production-hardening unless explicitly approved.
-
----
-
-## 17. Integration review checklist
-
-- [ ] All team PRDs exist.
-- [ ] All team specs exist.
-- [ ] Integration contracts are reviewed.
-- [ ] Manual tests exist in team specs.
-- [ ] Critical path tasks are current.
-- [ ] Blockers are current.
-- [ ] Scope cuts are recorded.
-- [ ] Demo script matches actual implementation.
-- [ ] Legal has reviewed final presentation language.
+| TODO | TODO | TODO | Not Started |

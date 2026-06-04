@@ -10,6 +10,8 @@ Use this file to prevent repeated debates and to help future agents understand w
 
 ## 2. Decisions
 
+Architecture decisions ratified 2026-06-03; canonical detail in `docs/architecture.md` §0 (labels D-A…D-H).
+
 | ID | Decision | Owner | Date | Reason | Affected Files |
 |---|---|---|---|---|---|
 | D-001 | Build on OrbitDB 4 + Helia 6 + js-libp2p 3 (pure JS), **not** Kubo/go-ipfs | Steve | 2026-06-03 | OrbitDB gives a CRDT job queue/registry/results over libp2p with no separate daemon; supersedes the `node-ipfs-container/` Kubo scaffold | `shared/`, `server/`, `worker/`, `ARCHITECTURE.md` |
@@ -44,7 +46,7 @@ Use this file to prevent repeated debates and to help future agents understand w
 
 | ID | Blocker | Owner | Blocking | Needed Decision / Action | Status |
 |---|---|---|---|---|---|
-| B-001 | TODO | TODO | TODO | TODO | Not Started |
+| B-001 | Auth module (`sign` / `verify` / `canonicalJSON`) unimplemented | Kevin / Authentication | Every signed path; nothing reaches Demo Ready (D-006) | Implement `auth/` to architecture §6 interface + error contract | Blocked |
 
 ---
 
@@ -52,7 +54,8 @@ Use this file to prevent repeated debates and to help future agents understand w
 
 | ID | Cut | Reason | Approved By | Date | Notes |
 |---|---|---|---|---|---|
-| CUT-001 | TODO | TODO | TODO | TODO | TODO |
+| CUT-001 | DHT-based WAN discovery | Assumes a DNS-reachable coordinator/relay for v1 | Eliot / Coordination | 2026-06-03 | Revisit for multi-site WAN |
+| CUT-002 | "Cheapest node" pricing in fitness scoring | Deferred; `pricePerJobUsd` reserved in schema | Eliot / Coordination | 2026-06-03 | arch §8 |
 
 ---
 

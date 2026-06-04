@@ -2,9 +2,9 @@
 
 ## 1. Purpose
 
-This file defines the shared technical contracts between teams.
+This file defines the shared technical contracts between teams — the boundary where modules meet.
 
-If a team-local `spec.md` conflicts with this file, this file wins until the conflict is resolved.
+Team PRDs define each module's responsibility, team specs define local implementation, and this file defines the shared boundary. **Detailed canonical shapes** (full schemas, protocol framing, constants) live in `docs/architecture.md`; this file is the **boundary ledger** teams ratify and freeze.
 
 ---
 
@@ -58,7 +58,7 @@ Approved by:
 - [ ] Kevin / Authentication
 - [ ] Chao / Device Registry
 - [ ] Cam / Job Queue
-- [ ] Elliot / Job Queue
+- [ ] Eliot / Job Queue
 - [ ] Steve / Job Execution
 - [ ] Maroua / Job Execution
 - [ ] Keith / Coordination
@@ -68,92 +68,87 @@ Approved by:
 
 ## 3. Shared objects
 
-Team leads should fill this out.
+Boundary summary. Full field lists/types in `docs/architecture.md` §7.
 
-| Object | Field / ID | Owner | Used By | Status | Notes |
+| Object | Key fields | Owner (writer) | Used by (reader) | Status | Spec |
 |---|---|---|---|---|---|
-| User / Session | TODO | Authentication | TODO | Not Started |  |
-| Device | TODO | Device Registry | TODO | Not Started |  |
-| Job | TODO | Job Queue | TODO | Not Started |  |
-| Worker / Executor | TODO | Job Execution | TODO | Not Started |  |
-| Result | TODO | Job Execution / Job Queue | TODO | Not Started |  |
+| Identity / PeerId | persisted Ed25519 keypair → `peerId` | Authentication | All | Building | arch §6 |
+| Device document | `_id`(=peerId), `cpu{cores,load1m,…}`, `ram{totalBytes,freeBytes}`, `storage{…}`, `latencyMs`, `status`, `maxConcurrent`, `currentLoad`, `availableCapacity`, `lastSeen`, `signature` | Device Registry (Execution writes capacity) | Job Queue | Building | arch §7.1 |
+| JobOffer | `type`, `jobId`, `submitterPeerId`, `spec{image,cmd,env,timeoutMs,requirements}`, `createdAt`, `signature` | Job Queue (submitter) | Job Execution (worker) | Not Started | arch §7.2 |
+| JobResponse | `type`, `jobId`, `workerPeerId`, `accepted`, `reason?`, `signature` | Job Execution (worker) | Job Queue (submitter) | Not Started | arch §7.3 |
+| JobResult | `type`, `jobId`, `workerPeerId`, `stdout`, `stderr`, `exitCode`, `durationMs`, `signature` | Job Execution (worker) | Job Queue (submitter) | Not Started | arch §7.4 |
+
+> v1 "auth" = peer/device identity + payload signing. There is **no** separate user-account/login object; a USER is represented by their node's `peerId`.
 
 ---
 
 ## 4. Shared statuses
 
-Team leads should define agreed statuses.
+### Node status (`status` on the device document)
 
-### User / Session status
+Owner: Device Registry (seeds it); updated by Job Execution at runtime.
 
-| Status | Meaning | Owner |
-|---|---|---|
-| TODO | TODO | Authentication |
+| Status | Meaning |
+|---|---|
+| `available` | Accepting offers; has free capacity. |
+| `draining` | Finishing current jobs; refuses new offers. |
+| `offline` | Unreachable / `lastSeen` older than 15s. |
 
-### Device status
+### Job status (submitter's view)
 
-| Status | Meaning | Owner |
-|---|---|---|
-| TODO | TODO | Device Registry |
+Owner: Job Queue.
 
-### Job status
+| Status | Meaning |
+|---|---|
+| `queued` | Submitted, not yet offered. |
+| `offered` | Offered to a candidate worker. |
+| `accepted` | Worker accepted; will run. |
+| `running` | Executing in Docker. |
+| `completed` | Result received and verified. |
+| `failed` | No candidate / rejected everywhere / timeout / untrusted result. |
 
-| Status | Meaning | Owner |
-|---|---|---|
-| TODO | TODO | Job Queue |
-
-### Execution status
-
-| Status | Meaning | Owner |
-|---|---|---|
-| TODO | TODO | Job Execution |
+> Not a strict-FIFO / exactly-once queue: assignment is a **retryable offer**; workers are **idempotent on `jobId`** and may reject a re-offer with `reason:"duplicate"` (arch §8).
 
 ---
 
-## 5. Cross-team dependencies
+## 5. Cross-team dependencies (the four contracts)
 
-| Producer | Consumer | What is shared | Required for demo | Status | Notes |
+| # | Producer | Consumer | What is shared | Required | Status |
 |---|---|---|---|---|---|
-| Authentication | Job Queue | TODO | Yes | Not Started |  |
-| Device Registry | Job Execution | TODO | Yes | Not Started |  |
-| Device Registry | Job Queue | TODO | TODO | Not Started |  |
-| Job Queue | Job Execution | TODO | Yes | Not Started |  |
-| Job Execution | Job Queue | TODO | Yes | Not Started |  |
-| Coordination | All teams | TODO | Yes | Not Started |  |
-| Legal | Coordination | Approved presentation language | Yes | Not Started |  |
+| 1 | Device Registry (Execution writes capacity) | Job Queue | `device-registry` OrbitDB document schema (arch §7.1) | Yes | Building |
+| 2 | Authentication | All teams | `sign` / `verify` / `canonicalJSON` + persisted PeerId + error contract (arch §6) | Yes | Blocked |
+| 3 | Job Queue ↔ Job Execution | both | libp2p stream `/edgecloud/jobs/1.0.0`: JobOffer → JobResponse → JobResult (arch §7.2–7.4) | Yes | Not Started |
+| 4 | Job Execution | Device Registry | capacity write-backs (`currentLoad` / `availableCapacity` / `status`) on accept / complete / fail (arch §10) | Yes | Not Started |
+| — | Coordination | All teams | per-node bootstrap wiring (libp2p + OrbitDB + modules), shared constants (arch §12–13) | Yes | Not Started |
+| — | Legal | Coordination | approved presentation language | Yes | Not Started |
 
 ---
 
 ## 6. Required calls / APIs / events
 
-Do not fill this with invented endpoints. Team leads should decide.
-
-| ID | Name | Producer | Consumer | Request / Input | Response / Output | Status |
+| ID | Name | Producer | Consumer | Input | Output | Status |
 |---|---|---|---|---|---|---|
-| API-001 | TODO | Authentication | TODO | TODO | TODO | Not Started |
-| API-002 | TODO | Device Registry | TODO | TODO | TODO | Not Started |
-| API-003 | TODO | Job Queue | TODO | TODO | TODO | Not Started |
-| API-004 | TODO | Job Execution | TODO | TODO | TODO | Not Started |
+| API-001 | `sign(payload)` | Authentication | All | payload object (no `signature`) | base64 signature string | Blocked |
+| API-002 | `verify(payload, signature, peerId)` | Authentication | All | payload, signature, peerId | boolean; `false` ⇒ drop & don't act (arch §6) | Blocked |
+| EVT-001 | device-registry `put` (OrbitDB documents) | Device Registry / Execution | Job Queue | signed Device document keyed by `_id` | replicated CRDT state | Building |
+| STREAM-001 | `/edgecloud/jobs/1.0.0` (libp2p) | Job Queue ↔ Execution | both | JobOffer | JobResponse, then JobResult | Not Started |
+
+Shared constants (protocol id, DB name `device-registry`, fitness weights `0.5/0.3/0.2`, timings `5s/15s`) are canonical in `docs/architecture.md` §12.
 
 ---
 
-## 7. Draft happy path
-
-Coordination and team leads should refine this.
+## 7. Happy path
 
 ```text
-TODO: Define final demo path.
-
-Possible shape:
-
-1. User/session is available.
-2. Device is registered or available.
-3. Job is submitted.
-4. Job is queued.
-5. Worker/device receives or claims job.
-6. Worker/device executes job.
-7. Result/status is reported.
-8. Demo shows final status/result.
+1. Node boots, loads persisted PeerId, discovers peers (DNS bootstrap + mDNS).
+2. Device Registry writes the signed device document to `device-registry` (status=available).
+3. Submitter builds a signed JobOffer.
+4. Job Queue scores candidates from its local registry replica (fitness: latency .5 / size .3 / load .2).
+5. Submitter opens `/edgecloud/jobs/1.0.0` to the top candidate and sends the JobOffer.
+6. Worker verifies, checks capacity, replies JobResponse{accepted}. Reject/timeout ⇒ next candidate.
+7. On accept, Execution decrements its own capacity (write-back), runs the job in Docker.
+8. Worker streams a signed JobResult (stdout/stderr/exitCode/durationMs); submitter verifies and displays.
+9. Execution restores capacity (write-back); the registry is fresh for the next scoring round.
 ```
 
 ---
@@ -174,4 +169,6 @@ Approved contract changes must be recorded in `04_decisions_risks_cuts.md`.
 
 | Question | Owner | Needed By | Status | Resolution |
 |---|---|---|---|---|
-| TODO | TODO | TODO | Not Started |  |
+| Deterministic registry address mechanism (fixed manifest vs. access-controller) — confirm approach | Device Registry + Coordination | before integration | Open | arch A-1 |
+| `latencyScore` source: shared-anchor RTT (today) vs. per-peer libp2p ping | Job Queue | before scoring tuning | Open | arch A-2 |
+| Auth module delivery — blocks every signed path | Authentication | ASAP | Open | see B-001 in `04_decisions_risks_cuts.md` |

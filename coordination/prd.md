@@ -1,136 +1,69 @@
 # PRD: Coordination
 
-## 1. Status
+## Status
 
-Status: `Not Started`  
-Owner: Keith  
-Team: Coordination  
+Status: `Not Started`
+Owner: Keith
+Team: Coordination
 Last updated: TODO
 
 ---
 
-## 2. Purpose
+## Module purpose
 
-TODO: Team to complete.
+TODO: In one short paragraph, state what Coordination must make true for the shared demo.
 
-In one paragraph, describe what this team must make true for the decentralized Cloud prototype demo.
-
----
-
-## 3. Relationship to master PRD
-
-This team PRD supports:
-
-- `../00_master_prd.md`
-- `../02_integration_contracts.md`
-- `../03_demo_script.md`
-
-If this file conflicts with `../00_master_prd.md` or `../02_integration_contracts.md`, the top-level file wins until the conflict is resolved.
+This is a module PRD, not a standalone product PRD. Keep it focused on coordinating the master demo promise in `../00_master_prd.md` across team modules.
 
 ---
 
-## 4. Demo responsibility
+## Owned responsibilities
 
-TODO: Team to complete.
-
-This team is responsible for:
-
-- TODO
-- TODO
-- TODO
-
-This team is not responsible for:
-
-- TODO
-- TODO
-- TODO
+- TODO: Maintain the end-to-end demo path and project-level docs.
+- TODO: Keep cross-team contracts, blockers, cuts, and demo script current.
+- TODO: Define how the final result/status is presented.
 
 ---
 
-## 5. Users / consumers
+## Not owned
 
-Who depends on this team's work?
+- TODO: List module implementation work Coordination is not doing.
+- TODO: List product, legal, or production-hardening decisions intentionally out of scope.
 
-| Consumer | What They Need | Required for Demo | Notes |
+---
+
+## Inputs and dependencies
+
+| Needed from | What Coordination needs | Required for demo | Notes |
 |---|---|---|---|
 | TODO | TODO | Yes / No |  |
 
 ---
 
-## 6. Features
+## Outputs and handoffs
 
-Team should define only the features required for the demo.
-
-| ID | Feature | Priority | Status | Notes |
-|---|---|---|---|---|
-| FEAT-001 | TODO | Must | Not Started |  |
-| FEAT-002 | TODO | Should | Not Started |  |
-| FEAT-003 | TODO | Could | Not Started |  |
-
-Priority values:
-
-- `Must`: required for demo.
-- `Should`: important but not demo-blocking.
-- `Could`: nice to have.
-- `Cut`: removed from demo scope.
-
----
-
-## 7. Requirements
-
-Team must fill this in.
-
-| ID | Requirement | Priority | Status | Source / Notes |
-|---|---|---|---|---|
-| REQ-001 | TODO | Must | Not Started |  |
-| REQ-002 | TODO | Should | Not Started |  |
-| REQ-003 | TODO | Could | Not Started |  |
-
----
-
-## 8. Dependencies
-
-| Dependency | Owner | Needed For | Status | Notes |
-|---|---|---|---|---|
-| TODO | TODO | TODO | Not Started |  |
-
----
-
-## 9. Handoff to other teams
-
-What does this team provide to others?
-
-| Provided Item | Consumed By | Defined In | Status |
+| Coordination provides | Consumed by | Defined in | Notes |
 |---|---|---|---|
-| TODO | TODO | `../02_integration_contracts.md` | Not Started |
+| TODO | All teams | `../02_integration_contracts.md` |  |
+| TODO | Demo audience | `../03_demo_script.md` |  |
+
+Shared IDs, payloads, commands, events, or statuses must also be reflected in `../02_integration_contracts.md`.
 
 ---
 
-## 10. Acceptance criteria
+## Demo acceptance
 
-This team is demo-ready when:
+Coordination is good enough for the demo when:
 
-- [ ] TODO
-- [ ] TODO
-- [ ] TODO
-- [ ] Relevant sections of `../02_integration_contracts.md` are current.
-- [ ] Relevant manual integration check in `spec.md` passes.
-- [ ] Known limitations are documented.
-
----
-
-## 11. Known limitations
-
-Team should document prototype limitations clearly.
-
-- TODO
-- TODO
-- TODO
+- [ ] TODO: The master PRD, contracts, tasks, risks/cuts, and demo script agree.
+- [ ] TODO: At least one end-to-end path is defined and rehearsable.
+- [ ] TODO: A fallback artifact plan exists.
+- [ ] Relevant contracts are current in `../02_integration_contracts.md`.
+- [ ] The implementation/checklist items in `spec.md` pass.
 
 ---
 
-## 12. Open questions
+## Known limitations
 
-| Question | Owner | Needed By | Status | Resolution |
-|---|---|---|---|---|
-| TODO | TODO | TODO | Not Started |  |
+- TODO: Document prototype-only coordination limitations.
+- TODO: Document any demo, product, or operational claims the presentation must avoid.

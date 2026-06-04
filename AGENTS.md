@@ -1,74 +1,170 @@
-# AGENTS.md
+Make sure to read and adhere to AGENTS.md.
 
-## Purpose
+## Repo purpose
 
-This file tells AI agents how to navigate and update this repository.
+This repo is a fast prototype for a decentralized edge cloud demo. Team folders are module handoffs for a 3-day build, not standalone product lanes.
 
-The repository supports a short prototype build for a decentralized Cloud demo. The repo is organized around team-owned documentation plus top-level coordination files.
+The workflow is lightweight:
 
-Agents should preserve the existing structure unless explicitly asked to reorganize it.
+```text
+Master PRD + architecture
+  -> team PRD
+  -> team spec
+  -> code
+  -> verification + status/decision updates
+```
+
+Do not turn this into a heavy process. Keep docs short, concrete, and demo-oriented.
 
 ---
 
-## Read order for agents
+## Authority order
 
-When starting work, read these files first:
+When docs conflict, use this order:
+
+1. `00_master_prd.md` - overall demo promise, scope, teams, and acceptance criteria.
+2. `02_integration_contracts.md` - ratified shared interfaces and cross-team boundary ledger.
+3. `docs/architecture.md` - shared technical reference for schemas, vocabulary, stack, protocols, constants, and ratified technical decisions.
+4. `01_top_level_tasks.md` - project status, blockers, team tasks, and cuts.
+5. Team `prd.md` files - what each module contributes to the demo.
+6. Team `spec.md` files - how each module should be built and verified.
+7. `03_demo_script.md` - live presentation path.
+8. `04_decisions_risks_cuts.md` - durable decisions, risks, blockers, cuts, legal concerns, and contract changes.
+9. Team `research/` folders - supporting context only.
+
+If `02_integration_contracts.md` and `docs/architecture.md` disagree, reconcile them instead of silently choosing one. `docs/architecture.md` carries detailed technical shapes; `02_integration_contracts.md` is the freezable team-ratified contract ledger.
+
+---
+
+## Required read path
+
+Before changing code in a team-owned area, read:
 
 1. `README.md`
 2. `00_master_prd.md`
 3. `02_integration_contracts.md`
-4. `01_top_level_tasks.md`
-5. `03_demo_script.md`
-6. `04_decisions_risks_cuts.md`
+4. `docs/architecture.md`
+5. The relevant team `research/` folder
+6. The team's `prd.md`
+7. The team's `spec.md`
+8. Any relevant entries in `04_decisions_risks_cuts.md`
 
-Then read the relevant team folder:
-
-- `auth/prd.md` and `auth/spec.md`
-- `device_registry/prd.md` and `device_registry/spec.md`
-- `job_queue/prd.md` and `job_queue/spec.md`
-- `job_execution/prd.md` and `job_execution/spec.md`
-- `coordination/prd.md` and `coordination/spec.md`
-- `legal/prd.md` and `legal/spec.md`
-
----
-
-## Documentation authority order
-
-Use this order when resolving conflicts:
-
-1. `00_master_prd.md` defines the overall demo promise and scope.
-2. `02_integration_contracts.md` defines shared interfaces and overrides team-local conflicts.
-3. `01_top_level_tasks.md` tracks project execution status.
-4. Team `prd.md` files define each team's contribution.
-5. Team `spec.md` files define implementation details.
-6. `03_demo_script.md` defines the live presentation path.
-7. `04_decisions_risks_cuts.md` records decisions, risks, cuts, and blockers.
-8. `legal/spec.md` governs legal/commercial presentation language.
-
-Do not silently resolve conflicts. If two docs disagree, update the lower-authority doc or add a note in `04_decisions_risks_cuts.md`.
+Before changing docs only, read the target doc plus the authority docs above it.
 
 ---
 
 ## Team folders
 
-Each team folder contains:
+Team-owned areas:
 
-```text
-prd.md
-spec.md
-```
+- Authentication: `auth/`
+- Device Registry: `device_registry/`
+- Job Queue: `job_queue/`
+- Job Execution: `job_execution/`
+- Coordination: `coordination/`
+- Legal: `legal/`
 
-The `prd.md` file explains what the team is responsible for in the prototype.
+Each team folder should contain:
 
-The `spec.md` file explains how the team expects to implement and integrate that responsibility.
+- `prd.md` - concise module PRD.
+- `spec.md` - buildable implementation/review handoff.
+- `research/` - supporting notes and references.
 
-The spec should always include a **Manual Test / Integration Check** section so another team or future agent can verify the subsystem.
+Research notes are not authority. If research conflicts with top-level contracts or team docs, update the authoritative doc or record the conflict.
 
 ---
 
-## Status values
+## Updating PRDs
 
-Use these status values consistently:
+Update a team `prd.md` when the module's demo contribution changes:
+
+- purpose,
+- owned responsibilities,
+- not-owned scope,
+- inputs/dependencies,
+- outputs/handoffs,
+- demo acceptance,
+- known limitations.
+
+Team PRDs should not become standalone product PRDs. The master demo promise lives in `00_master_prd.md`; team PRDs describe composable modules that support it.
+
+If a team PRD changes a shared dependency, handoff, API, payload, status, event, ID, or assumption, update `02_integration_contracts.md` too.
+
+---
+
+## Updating specs
+
+Update a team `spec.md` when implementation or verification details change:
+
+- implementation approach,
+- interfaces consumed/provided,
+- data and state,
+- error cases and fallback behavior,
+- likely files/modules,
+- what an implementer needs before coding,
+- manual and integration verification.
+
+Use the spec as the build handoff for humans and AI agents. If the relevant spec does not explain what to build and how to verify it, improve the spec before guessing in code.
+
+When code already exists ahead of the spec, update the spec to describe the current implementation before extending that code.
+
+---
+
+## Updating shared docs
+
+Update these files when the relevant fact changes:
+
+- `00_master_prd.md`: demo promise, scope, goals/non-goals, team responsibilities, top-level requirements, or demo acceptance.
+- `01_top_level_tasks.md`: work starts, blocks, integrates, becomes demo-ready, or is cut.
+- `02_integration_contracts.md`: shared schemas, APIs, payloads, statuses, events, protocol IDs, constants, or cross-team assumptions are created or changed.
+- `docs/architecture.md`: canonical technical schemas, vocabulary, stack choices, protocols, constants, or architecture decisions change.
+- `03_demo_script.md`: the live demo path, visible presenter steps, fallback artifacts, or presentation wording changes.
+- `04_decisions_risks_cuts.md`: decisions are made, risks are discovered, blockers appear, scope is cut, legal/presentation concerns arise, or frozen contracts change.
+
+Do not update only one side of a shared fact. For example, a new protocol ID usually needs `docs/architecture.md`, `02_integration_contracts.md`, the relevant team spec, and possibly `04_decisions_risks_cuts.md`.
+
+---
+
+## Decisions, risks, blockers, and cuts
+
+Use `04_decisions_risks_cuts.md` to prevent repeated debates and preserve context for future agents.
+
+Record:
+
+- decisions that constrain future work,
+- serious risks and mitigations,
+- blockers that stop demo readiness,
+- scope cuts and who approved them,
+- legal or presentation concerns,
+- post-freeze contract changes.
+
+If a change rejects an obvious alternative, record the rejection there or in the commit message so future agents do not re-litigate it.
+
+---
+
+## Implementation rules
+
+- Keep diffs small and demo-focused.
+- Prefer existing repo patterns before adding abstractions.
+- Do not add new dependencies unless the relevant spec or architecture doc calls for them.
+- Keep JavaScript as ES modules and follow `docs/architecture.md` coding conventions.
+- Use the shared contracts instead of inventing local payload shapes.
+- Do not claim production security, compliance, billing, sandboxing, FIFO ordering, or exactly-once behavior unless the docs and verification support it.
+- If a cross-team contract is not ready, document the blocker instead of coding around it silently.
+
+---
+
+## Verification and status updates
+
+After code or spec-affecting changes:
+
+- Run the relevant manual check from the team spec.
+- Run any available repo check, such as `npm run check:device-registry` when Device Registry code changes.
+- Update `01_top_level_tasks.md` with status changes.
+- Update `04_decisions_risks_cuts.md` for new decisions, risks, blockers, or cuts.
+- Update `03_demo_script.md` if the demo-visible behavior changed.
+
+Use only these project statuses:
 
 - `Not Started`
 - `Building`
@@ -76,87 +172,3 @@ Use these status values consistently:
 - `Integrated`
 - `Demo Ready`
 - `Cut`
-
-Definitions:
-
-- `Not Started`: no meaningful work yet.
-- `Building`: actively being implemented or drafted.
-- `Blocked`: cannot proceed without a decision, dependency, or fix.
-- `Integrated`: works with at least one other subsystem.
-- `Demo Ready`: works in the end-to-end demo path.
-- `Cut`: explicitly removed from current demo scope.
-
----
-
-## Editing rules for agents
-
-When editing docs:
-
-1. Do not invent team requirements unless explicitly instructed.
-2. Do not invent APIs, schemas, or legal conclusions.
-3. Leave clear TODOs for team-owned decisions.
-4. Keep docs short and operational.
-5. Prefer tables and checklists over long prose.
-6. Update `01_top_level_tasks.md` when adding or changing work.
-7. Update `02_integration_contracts.md` when changing shared payloads, IDs, statuses, endpoints, or cross-team assumptions.
-8. Update `04_decisions_risks_cuts.md` when making a decision, identifying a serious risk, or cutting scope.
-9. If changing presentation language, check `legal/spec.md`.
-10. If changing the live demo path, update `03_demo_script.md`.
-
----
-
-## Contract-change rule
-
-After integration contracts are marked frozen, changes to shared IDs, payloads, statuses, endpoints, or required cross-team calls require approval from:
-
-- Keith / Coordination
-- the producing team lead
-- the consuming team lead
-
-Record approved contract changes in `04_decisions_risks_cuts.md`.
-
----
-
-## Demo-readiness rule
-
-A subsystem is not `Demo Ready` merely because its local code works.
-
-A subsystem may be marked `Demo Ready` only when:
-
-- its local acceptance criteria are satisfied,
-- its manual integration check passes,
-- at least one consuming or producing team has successfully integrated with it,
-- its known limitations are documented,
-- it does not block the top-level demo path.
-
----
-
-## Legal/commercial claim rule
-
-Do not add claims that the prototype is:
-
-- production-ready,
-- secure against arbitrary malicious devices,
-- fully decentralized in every respect,
-- compliance-ready,
-- privacy-preserving in a production/legal sense,
-- trustless,
-- enterprise-ready,
-- certified,
-- audited,
-- safe for arbitrary untrusted code execution,
-
-unless Legal has explicitly approved the wording in `legal/spec.md`.
-
----
-
-## Current teams
-
-| Team | Lead / Owner | Folder |
-|---|---|---|
-| Authentication | Kevin | `auth/` |
-| Device Registry | Chao | `device_registry/` |
-| Job Queue | Cam and Elliot | `job_queue/` |
-| Job Execution | Steve and Maroua | `job_execution/` |
-| Coordination | Keith | `coordination/` |
-| Legal | Legal team | `legal/` |

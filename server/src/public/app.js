@@ -564,7 +564,7 @@ function initViz() {
   if (!svg || VIZ.inited) return;
   var defs = svg.appendChild(svgEl('defs'));
   var glow = svgEl('filter', { id: 'vizWhiteGlow', filterUnits: 'userSpaceOnUse', x: -1000, y: -1000, width: 3000, height: 3000 });
-  glow.appendChild(svgEl('feGaussianBlur', { in: 'SourceGraphic', stdDeviation: 4, result: 'blur' }));
+  glow.appendChild(svgEl('feGaussianBlur', { in: 'SourceGraphic', stdDeviation: 2.4, result: 'blur' }));
   var merge = svgEl('feMerge');
   merge.appendChild(svgEl('feMergeNode', { in: 'blur' }));
   merge.appendChild(svgEl('feMergeNode', { in: 'SourceGraphic' }));
@@ -670,28 +670,30 @@ function animateLink(peerId) {
   if (!layer || !to) return;
   var c = VIZ.center, dx = to.x - c.x, dy = to.y - c.y, length = Math.sqrt(dx * dx + dy * dy);
   if (!length) return;
-  var DUR = 1.0, pulseLen = Math.min(115, Math.max(60, length * 0.24));
+  // A STREAM of small white dashes flowing toward the worker — reads as data
+  // moving down a wire, not a single energy bolt. Steady (linear), moderate pace.
+  var DUR = 1.8, period = 22; // dash 6 + gap 16
   var pulse = svgEl('line', {
     class: 'viz-link-pulse',
     x1: c.x, y1: c.y, x2: to.x, y2: to.y,
     filter: 'url(#vizWhiteGlow)',
-    'stroke-dasharray': pulseLen + ' ' + (length + pulseLen),
+    'stroke-dasharray': '6 16',
     'stroke-dashoffset': 0,
   });
+  // negative offset flows the dashes from center → worker; fixed travel so the
+  // visual speed is identical on every link regardless of its length.
   var dash = svgEl('animate', {
     attributeName: 'stroke-dashoffset',
     from: 0,
-    to: -(length + pulseLen),
+    to: -(period * 15),
     dur: DUR + 's',
     fill: 'freeze',
-    calcMode: 'spline',
-    keyTimes: '0;1',
-    keySplines: '0.35 0 0.25 1',
+    calcMode: 'linear',
   });
   var fade = svgEl('animate', {
     attributeName: 'opacity',
-    values: '0;1;1;0',
-    keyTimes: '0;0.12;0.82;1',
+    values: '0;0.85;0.85;0',
+    keyTimes: '0;0.18;0.7;1',
     dur: DUR + 's',
     fill: 'freeze',
   });

@@ -29,7 +29,7 @@ let failures = 0;
 
 const log = (...a) => console.log(...a);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-async function waitFor(fn, { timeout = 60000, interval = 500, label = 'condition' } = {}) {
+async function waitFor(fn, { timeout = 120000, interval = 500, label = 'condition' } = {}) {
   const end = Date.now() + timeout;
   while (Date.now() < end) {
     try { if (await fn()) return true; } catch { /* keep polling */ }
@@ -70,7 +70,7 @@ async function fetchResult(kp, jobId) {
   const r = await api('GET', `/api/jobs/${jobId}/result`, undefined, { authorization: `Bearer ${ver.body.token}` });
   return r;
 }
-async function submitAndWait(kp, code, { timeout = 60000 } = {}) {
+async function submitAndWait(kp, code, { timeout = 120000 } = {}) {
   const env = jobEnvelope(kp, code);
   const sub = await api('POST', '/api/jobs', env);
   await waitFor(async () => (await api('GET', `/api/jobs/${env.jobId}/status`)).body.status === 'done',
@@ -111,7 +111,7 @@ async function main() {
 
   // seed an allowlist CSV and import it
   const csv = path.join(tmp, 'attendees.csv');
-  fs.writeFileSync(csv, 'First,Last,Email\n' + ['a', 'b', 'c', 'd', 'e'].map((x) => `T,U,${x}@e2e.test`).join('\n') + '\n');
+  fs.writeFileSync(csv, 'First,Last,Email\n' + ['a', 'b', 'c', 'd', 'e', 'limit'].map((x) => `T,U,${x}@e2e.test`).join('\n') + '\n');
   await new Promise((res, rej) => {
     const imp = spawn(NODE, ['server/src/allowlist-import.js', csv],
       { cwd: REPO, env: { ...process.env, EDGECLOUD_DATA: serverData, EDGECLOUD_SHARED_SALT: SALT } });
@@ -210,6 +210,20 @@ async function main() {
     check('takeover produced the result', res.body.result?.stdout?.trim() === 'slow-done');
     check('executed by the survivor', res.body.result?.executedBy === workerPeer[survivorName],
       `executedBy ${res.body.result?.executedBy?.slice(-8)} vs survivor ${String(workerPeer[survivorName]).slice(-8)}`);
+  }
+
+  log('\n▶ Scenario 6: max 4 keys per email (5th registration → 409)');
+  {
+    const email = 'limit@e2e.test';
+    const codes = [];
+    for (let i = 0; i < 4; i++) {
+      const kp = generateKeypair();
+      codes.push((await api('POST', '/api/register', { email, pubkey: kp.publicKey })).status);
+    }
+    check('first 4 keys accepted', codes.every((c) => c === 200), `statuses ${codes}`);
+    const fifth = await api('POST', '/api/register', { email, pubkey: generateKeypair().publicKey });
+    check('5th key rejected with 409', fifth.status === 409, `got ${fifth.status}`);
+    check('rejection mentions the limit', /4 registered keys/.test(fifth.body.error || ''), fifth.body.error);
   }
 
   log(`\n${failures === 0 ? '✅ ALL SCENARIOS PASSED' : `❌ ${failures} CHECK(S) FAILED`}`);

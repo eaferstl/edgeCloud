@@ -10,12 +10,12 @@ Legend: ✅ = verified pass · 🔬 = empirical validation before implementation
 
 Reproduce the automated suite:
 ```bash
-EDGECLOUD_SHARED_SALT=testsalt node --test     # 30 tests across shared/ server/ worker/
+EDGECLOUD_SHARED_SALT=testsalt node --test     # 36 tests across shared/ server/ worker/
 ```
 
 ---
 
-## A. Automated tests (30, all passing)
+## A. Automated tests (36, all passing)
 
 ### T-Fuzz — property/fuzz tests for protocol-critical pure logic
 `shared/test/fuzz.test.js` (seeded PRNG, reproducible). Claims and results:
@@ -48,12 +48,13 @@ result → nobody executes (dedup); a **dead round-0 winner → a later round ta
 side still serves it. ✅ (6 scenarios)
 
 ### T-E2E-Local — local 1-server + 2-worker end-to-end harness
-`scripts/e2e-local.mjs` (`npm run e2e:local`) boots a real server + two real workers
-as processes (temp dirs, unique ports, the server's own key as genesis) and runs the
-full HTTP + libp2p + OrbitDB path: baseline happy path; duplicate → cache hit;
-two identical concurrent submissions → one result; stranger result fetch → 403;
-**kill the claim winner mid-job → the survivor takes over and produces the result**.
-✅ (all scenarios)
+`scripts/e2e-local.mjs` (`npm run e2e:local`) **spawns** a real server + two real
+workers as child processes (temp dirs, unique ports, the server's own key as genesis
+— so it needs filesystem + process-spawn permission, not a read-only checkout) and
+runs the full HTTP + libp2p + OrbitDB path: baseline happy path; duplicate → cache
+hit; two identical concurrent submissions → one result; stranger result fetch → 403;
+**kill the claim winner mid-job → the survivor takes over**; and **max 4 keys per
+email (5th → 409)**. ✅ (6 scenarios)
 
 ### T-Trust — trust chain unit tests
 `shared/test/trust.test.js`: genesis→B→C transitive trust; forged-signature

@@ -57,6 +57,18 @@ All are open-write (`IPFSAccessController({ write: ['*'] })`); authorization is
 with identical options, the `/orbitdb/…` address is derived from the name alone —
 no address exchange. **No raw email ever touches OrbitDB.**
 
+> **Network exposure.** OrbitDB runs on Helia (IPFS) over **our own private
+> js-libp2p** — *no DHT, no public IPFS bootstrap*, so we never announce/provide our
+> content and it isn't discoverable from the public IPFS network; blocks move via
+> bitswap among our connected peers. (Caveat: Helia's default public-gateway *fetch*
+> fallbacks aren't explicitly disabled — a recommended hardening, see
+> `THREAT_MODEL.md` "Network exposure".) But the rendezvous address + DB addresses are
+> public and there's **no read-auth**, so all data (jobs AND results) is **readable by
+> anyone who runs a node**: a private overlay that is permissionlessly joinable, not a
+> confidential store. See `THREAT_MODEL.md` "Potential improvements"
+> (encrypt-to-recipient, assign-then-encrypt point-to-point) for how to make payloads
+> actually private.
+
 | DB (`shared/src/constants.js`) | Type | Holds |
 |---|---|---|
 | `edgecloud-registry-v1` | events | server-attested user pubkeys: `{ pubkey, emailHmac, addedAt, attestedBy, attestSig }` |
@@ -80,6 +92,26 @@ Built in `shared/src/{envelope,zip,manifest,result}.js`, identically in the brow
 - The zip is **deterministic** (fflate STORE, fixed mtime, fixed entry order,
   canonical-JSON manifest) so the *same JS string → same bytes → same jobId* →
   cache hit. `nonce`/`submittedAt` are NOT part of jobId.
+  - **⚠️ Caveat — caching assumes the program is deterministic.** Because the cache
+    keys on the program's *content* (the jobId), resubmitting the same code returns
+    the **first run's** result. That is correct and efficient for **pure** programs
+    (multiply, π digits, primes) but **wrong for non-deterministic** ones: a program
+    that calls `Math.random()`, reads the current date/time, or fetches live data
+    *should run again* — yet it will get the stale cached answer from its first
+    execution. This is the same purity/idempotency assumption the exactly-once
+    coordination relies on (see `THREAT_MODEL.md` §L6 + assumption #5). A future fix
+    is an opt-out — e.g. a **"run fresh (don't cache)" checkbox** that folds the
+    envelope `nonce` into the hashed content (or a manifest `cache:false` flag) so a
+    "give me a *fresh* run" job gets a distinct jobId. **Tradeoff / abuse risk:** that
+    opt-out also removes the cache's natural DoS protection — an attacker could
+    resubmit the **same expensive computation** over and over, each forced to run
+    anew, burning volunteer workers' CPU. So a no-cache mode needs abuse controls
+    (per-key rate limiting / accounting / proof-of-work), not a free toggle. This is
+    a natural place for **reputation**: each requester key carries a standing, and
+    abusive requesters (flooding expensive no-cache jobs) get their privileges
+    **throttled or revoked** — their allowed compute per unit time decreased — while
+    well-behaved keys keep full access. Reputation turns "anyone registered can run
+    anything" into a self-correcting, abuse-resistant allocation.
 - zip contains `manifest.json` + (`main.js` | `module.wasm`). Manifest declares
   `type`, `entry`, `args`, `timeoutMs`, and (wasm) the `command`
   (`["wasmtime","run","--dir",".","module.wasm"]`). **Output convention: captured

@@ -16,11 +16,11 @@
     "build-wasm": "node scripts/build-wasm.js"
   },
   "dependencies": {
-    "@libp2p/gossipsub": "16.0.1",
     "@chainsafe/libp2p-noise": "17.0.0",
     "@chainsafe/libp2p-yamux": "8.0.1",
     "@edgecloud/shared": "0.1.0",
     "@libp2p/circuit-relay-v2": "4.2.6",
+    "@libp2p/gossipsub": "16.0.1",
     "@libp2p/identify": "4.1.7",
     "@libp2p/tcp": "11.0.21",
     "@libp2p/websockets": "10.1.14",

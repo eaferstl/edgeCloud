@@ -10,6 +10,11 @@ import path from 'node:path';
 
 export async function createOrbitNode(libp2p, dataDir) {
   const blockstore = new LevelBlockstore(path.join(dataDir, 'blocks'));
+  // NOTE: we use Helia's default block-brokers/routers. Overriding them to drop the
+  // public-gateway fallbacks (to stop a cache miss from leaking a CID to public IPFS
+  // gateways) broke OrbitDB replication in testing — likely a version-wiring mismatch
+  // between a pinned @helia/block-brokers and what Helia bundles. Deferred until the
+  // correct config is found. See THREAT_MODEL.md "Network exposure".
   const ipfs = await createHelia({ libp2p, blockstore });
   const orbitdb = await createOrbitDB({ ipfs, directory: path.join(dataDir, 'orbitdb') });
   const databases = await openNetworkDatabases(orbitdb);

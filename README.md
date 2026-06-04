@@ -7,7 +7,7 @@ A decentralized cloud built from everyday devices. edgeCloud provides:
 - **Job queue** — accepting and scheduling units of work
 - **Job execution** — running queued jobs on registered devices
 
-v1 runs as Node.js worker nodes running Docker on VMs/hosts, coordinated peer-to-peer over libp2p with a shared OrbitDB device registry — no central server.
+v1 runs as Node.js worker nodes (Docker) coordinated peer-to-peer over libp2p + an OrbitDB CRDT. A lightweight **rendezvous server** provides relay, discovery, and a browser bridge — so the *compute* is decentralized (jobs run on volunteer devices), though that rendezvous is still a coordination point, not a fully serverless design. See [`ARCHITECTURE.md`](ARCHITECTURE.md) / [`THREAT_MODEL.md`](THREAT_MODEL.md).
 
 ---
 
@@ -27,8 +27,11 @@ the network) differs, so it's called out in each section.
    list. Up to **4 keys per email** (e.g. phone + laptop). No secret/seed to manage — your
    key *is* your identity.
 4. Pick an example from the dropdown or type a JavaScript expression, hit **Register** then
-   submit. The job runs on a volunteer worker node and the result comes back **to you only**
-   (proven by signing a server challenge with your key).
+   submit. The job runs on a volunteer worker node and the result comes back **to you**
+   (the website shows it only to a key that submitted it, proven by signing a server
+   challenge — note this is HTTP access control, **not** confidentiality: results sit in
+   plaintext in the replicated OrbitDB, readable by any node operator; see
+   [`THREAT_MODEL.md`](THREAT_MODEL.md)).
 
 <a id="run-a-worker"></a>
 ### 2. Technical user — donate compute (run a worker node)
@@ -108,7 +111,7 @@ The build is organized around a 3-day sprint with several parallel teams:
 
 ## Prototype goal
 
-v1 demonstrates decentralized **serverless function execution**: a user submits a containerized job, and the network schedules it to the lowest-latency capable peer, runs it in Docker, and streams the result back — coordinated peer-to-peer with no central server.
+v1 demonstrates decentralized **compute**: a user submits a **signed JS or WASM job**; worker nodes coordinate over an OrbitDB CRDT to run it **exactly-once** (a deterministic claim tiebreak — no central scheduler), execute it in a hardened sandbox, and return the result through OrbitDB. A lightweight rendezvous server provides relay + a browser bridge. (Running arbitrary containers / long-running services is a *future* direction, not the current build.)
 
 The end-to-end workflow spans:
 

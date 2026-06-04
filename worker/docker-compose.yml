@@ -32,9 +32,10 @@ services:
       # Docker's default seccomp profile stays enforced (do NOT set unconfined).
     read_only: true              # immutable root filesystem
     tmpfs:
-      # Job scratch + any temp live here. exec is required (the job's `node` /
-      # `wasmtime` read code from scratch); nosuid/nodev keep it hostile.
-      - /tmp:rw,exec,nosuid,nodev,size=128m,mode=1777
+      # Job scratch + any temp live here. noexec/nosuid/nodev keep it hostile: the
+      # job's code is READ by node/wasmtime (which live on the read-only rootfs), so
+      # the scratch never needs to be executable — a job can't drop+run a binary here.
+      - /tmp:rw,noexec,nosuid,nodev,size=128m,mode=1777
       - /run:rw,noexec,nosuid,nodev,size=8m
     pids_limit: 256              # fork-bomb backstop
     cpus: "1.5"

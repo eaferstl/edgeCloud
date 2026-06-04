@@ -33,7 +33,7 @@ user**, **central/rendezvous server(s)**, **worker nodes**.
 | A2 | A worker's libp2p private key + OrbitDB state (`/data`) | theft by submitted code | root-owned mode 700; job runs as a different uid; Node `--permission` |
 | A3 | Attendee email addresses (PII) | exposure on the public CRDT | only `HMAC-SHA256(email, SHARED_SALT)` is ever written to OrbitDB |
 | A4 | "Only registered attendees can submit" | unregistered/forged submitters | Ed25519 signatures verified against a server-attested registry |
-| A5 | "Only the submitter reads their result" | other users reading a result | challenge/response: read requires signing a server nonce with the submitter key |
+| A5 | "Only the submitter reads their result **via the website**" | other **browser/API** users reading a result through the HTTP endpoint | challenge/response: read requires signing a server nonce with the submitter key. ⚠️ This is **HTTP access control, NOT confidentiality** — results sit in plaintext in the open, replicated `edgecloud-results` DB, so **any node operator reads them directly** (see L4 + "Network exposure" below). |
 | A6 | The volunteer's host machine + LAN | attack by submitted code | container + egress firewall + unprivileged job uid + no job network |
 | A7 | "A job is not executed twice" (best-effort) | wasted/duplicate execution | claims log + deterministic tiebreak; dedupe by jobId |
 
@@ -62,13 +62,23 @@ compromise of pinned dependencies, or a kernel/hypervisor 0-day (see §10).
 - **Threats & mitigations**: the key never leaves the device, so the network/server
   can't steal it. A user signs both job envelopes (over `jobId`) and result-fetch
   challenges.
-- **Residual risk**: a key in `localStorage` is exposed to any XSS on the origin and
-  to anyone with the device. There is **no TLS** (plain HTTP on an IP), so a
-  network MITM can read traffic and tamper with the served page — a MITM could
-  swap the page's JS and capture the key. **Accepted for the demo** (R-002); do not
-  use a key here that matters elsewhere.
-- **Assumption**: the served page and vendored crypto libs are delivered intact
-  (no MITM, no malicious server operator) at the moment of use.
+- **Residual risk — and note WHY TLS matters here**: there is **no TLS** (plain HTTP on
+  a bare IP). The usual mental model is "HTTPS = privacy," but in this design the more
+  important property HTTPS would provide is **integrity of the code**. Because all the
+  security-critical logic (keygen, signing, the deterministic zip) runs in JavaScript
+  **served over plain HTTP**, a network attacker (any MITM on the path — hostile Wi-Fi,
+  a compromised router, an ISP) can **rewrite the JavaScript in transit** and replace
+  the legitimate page with malicious code that **exfiltrates the user's private key**
+  the moment it's generated. So the no-TLS gap is not merely "someone could read my
+  traffic" — it's "someone could swap the app for a key-stealer." It also exposes the
+  `localStorage` key to any XSS on the origin and to anyone with the device.
+  **Accepted for the demo** (R-002); do not use a key here that matters elsewhere. The
+  fix is ordinary: serve over **HTTPS** (a domain + Let's Encrypt/Caddy), which is the
+  integrity anchor for everything the client does.
+- **Assumption (load-bearing)**: the served page and vendored crypto libs are delivered
+  **intact and unmodified** at the moment of use. Without TLS this assumption rests on
+  there being no MITM and no malicious/compromised server — a weak footing, called out
+  honestly.
 
 ### L2 — Registration, allowlist & email privacy (A3, A4)
 - **Design**: the server checks the email against a SQLite allowlist (from the
@@ -147,8 +157,14 @@ compromise of pinned dependencies, or a kernel/hypervisor 0-day (see §10).
   two partitions can each elect a winner and both execute. This is **tolerated**: the
   results DB is keyed by `jobId`, so duplicates collapse to one logical record, and
   jobs are assumed idempotent/side-effect-free. So the honest guarantee is
-  **"at-least-once, and exactly-once in the absence of partition,"** not hard
-  exactly-once. A dead winner is recovered by timeout-based round-N+1 takeover
+  **"at-least-once, and exactly-once *when all workers' claims replicate within the
+  settle window*,"** not hard exactly-once. Note the "no partition" case isn't quite
+  enough on its own: the coordinator appends a claim, waits a fixed settle window
+  (`CLAIM_SETTLE_MS`), then reads the claims it can *see locally* — there is no barrier
+  proving full replication, so if claim propagation is slower than the settle window
+  (heavy load, a slow link) two workers can momentarily not see each other and both
+  execute. Same harmless outcome (dedupe by `jobId`); the settle window is a tuning
+  knob, not a proof. A dead winner is recovered by timeout-based round-N+1 takeover
   (verified live by killing the winner mid-job).
 - **Assumption (load-bearing)**: submitted jobs are **pure/idempotent** (no external
   side effects), so a rare double-execution is harmless. edgeCloud does not sandbox
@@ -201,6 +217,32 @@ Defense-in-depth (validated end-to-end, §T-Sandbox):
   tied to any human identity.
 - **Assumption**: libp2p's Noise/peer-id crypto is sound (standard).
 
+### Network exposure — "public" means a private overlay that anyone can join
+A common misconception: the data is **not** on the public/global IPFS network.
+OrbitDB runs on Helia (an IPFS implementation) configured with **our own private
+js-libp2p** — there is **no DHT and no public IPFS bootstrap**, so we never *announce
+or provide* our content (CIDs) to the world, and a random IPFS node cannot discover
+it. Peers find each other **only** by dialing our rendezvous server, and in practice
+all blocks are exchanged via bitswap among our directly-connected peers.
+
+> **Honest caveat (verified against the code):** we pass our own libp2p to
+> `createHelia`, but we do **not** explicitly override Helia's default block-brokers /
+> routers, which include public-gateway *fetch* fallbacks (`trustlessGateway`,
+> `httpGatewayRouting`). So on a local cache miss a node *could* query public IPFS
+> gateways for a CID — which would **leak that CID** (metadata) to the gateway
+> operator, and in principle fetch a block if someone else had published it. Our
+> blocks live only on our nodes, so this path normally resolves via bitswap, not
+> gateways. **Recommended one-line hardening** (not yet applied):
+> `createHelia({ libp2p, blockstore, blockBrokers: [bitswap()], routers: [libp2pRouting(libp2p)] })`
+> to drop the public-gateway paths entirely.
+
+**However**, that rendezvous multiaddr is in the open-source repo, the OrbitDB database
+addresses are deterministic/public, and there is **no auth to join the network or to
+read the databases** — app-layer signatures gate *writes*, not *reads*. So the honest
+posture is: a private overlay, **not** public IPFS, but **permissionlessly joinable**.
+For threat-modeling, **treat all OrbitDB data (jobs AND results) as readable by anyone
+willing to run a node** — just not by the whole internet passively.
+
 ---
 
 ## 5. The central server is "honest-but-curious" — and that is the headline limitation
@@ -236,11 +278,57 @@ is exactly the gap the Aegis/TEE direction closes.
 3. **Server operators are honest** (they can read everything and attest anyone).
 4. The **Docker/Linux kernel boundary**, **wasmtime WASI**, and **Node Permission
    Model** are sound (no escape from submitted code).
-5. Submitted jobs are **pure/idempotent**, so rare double-execution is harmless.
+5. Submitted jobs are **pure/idempotent** — so rare double-execution is harmless,
+   **and** content-addressed result caching is valid. This breaks for
+   **non-deterministic** jobs (randomness, current time, live data): they'd get the
+   cached first-run answer instead of a fresh run (see `ARCHITECTURE.md` job caveat).
 6. App-layer Ed25519 verification is always run before trusting CRDT entries (it is).
 7. Pinned crypto libs (tweetnacl, node:crypto) are correct, and the served page is
    delivered un-MITM'd at use time.
 8. Workers/clients run the genuine, unmodified edgeCloud code.
+
+## 7b. Potential improvements (achievable on this stack, before TEEs)
+
+These would meaningfully strengthen the prototype without changing its fundamental
+nature; they are documented here so the gaps above are paired with concrete fixes.
+
+1. **Encrypt results to the submitter.** Have the worker seal the result to the
+   submitter's key (libp2p/NaCl sealed box, using the pubkey already in the job
+   envelope) before writing it to `edgecloud-results`. Then the result on the public
+   DB is ciphertext only the submitter can open — closing the "any node operator reads
+   results" gap (L4/A5). *Caveat:* same-code→same-jobId means multiple submitters
+   (seal per submitter, or drop dedup for private jobs); and it does **not** hide the
+   result from the worker that computed it.
+
+2. **Assign first, then encrypt point-to-point** (the stronger version). The key
+   insight: **if the whole network can read the inputs, encrypting only the output is
+   nearly worthless.** So keep the public layer for *coordination only*, never the
+   payload: the requester asks the network — or deterministically computes, via the
+   same claim/tiebreak we already have — **which worker** should run the job; that
+   answer (just a peerId) is the only public fact; the requester then **encrypts the
+   input directly to that one worker** over an encrypted libp2p stream, the worker
+   runs it and **encrypts the output back**. Now the network sees *who*, never *what*.
+   *Trade-offs:* loses content-based dedup/caching; "selected worker offline" requires
+   re-selection; and the chosen worker still sees plaintext (only TEEs close that).
+
+3. **Verify email ownership at registration.** Today the server only checks that the
+   address is on the attendee allowlist — it does **not** prove the registrant *owns*
+   it, so anyone who knows an allowlisted address can register a key under it (L2).
+   The rendezvous server could send a **confirmation link** to the address and only
+   register the key after the link is clicked — turning "on the guest list" into
+   "proven control of the inbox," and adding real Sybil resistance.
+
+4. **Sign results** (integrity). Have the executing worker sign its result; consumers
+   verify before trusting it — closing the unsigned-result spoofing gap (R-003).
+
+5. **Decentralize the entry points.** The rendezvous server is the current
+   centralization point (NAT traversal + browser bridge), not a trust requirement.
+   Multiple interchangeable servers already work via the endorsement chain; next:
+   workers seed from many rendezvous addrs, and capable clients join libp2p directly
+   so no privileged server sits in the data path.
+
+These reduce exposure to the *network*. None of them hides data from the *worker doing
+the computation* — that is the wall only hardware (TEEs) gets over, which is §8.
 
 ## 8. Where the real guarantees come from next: Aegis / TEEs
 

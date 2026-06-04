@@ -26,6 +26,8 @@ async function main() {
   console.log(`[boot] peerId: ${peerId}`);
 
   const blockstore = new LevelBlockstore(path.join(config.dataDir, 'blocks'));
+  // NOTE: default Helia block-brokers/routers. Overriding to drop the public-gateway
+  // fallbacks broke replication in testing (deferred — see server/src/orbit-node.js).
   const ipfs = await createHelia({ libp2p, blockstore });
   const orbitdb = await createOrbitDB({ ipfs, directory: path.join(config.dataDir, 'orbitdb') });
 

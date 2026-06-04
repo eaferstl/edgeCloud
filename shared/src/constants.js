@@ -22,8 +22,10 @@ export const TOPIC_HEARTBEAT = 'edgecloud/heartbeat/v1'; // worker presence (UI 
 export const GENESIS_SERVER_KEY =
   process.env.EDGECLOUD_GENESIS_KEY || '7HHBxNv04kl9VhOynWxWuchSKgE4v5j/1H/k6r7oSHk=';
 
-// Public multiaddrs of the genesis rendezvous server. Workers bootstrap here;
-// additional servers are discovered via the edgecloud-servers DB.
+// Public multiaddrs of the genesis rendezvous server. Workers bootstrap here.
+// (Additional trusted servers are RECORDED in the edgecloud-servers DB and used
+// for trust, but workers currently dial only RENDEZVOUS_MULTIADDR / these defaults
+// — multiaddr-based discovery of those extra servers is not yet wired up.)
 // RENDEZVOUS_MULTIADDR (comma-separated) overrides.
 export const GENESIS_MULTIADDRS = (process.env.RENDEZVOUS_MULTIADDR
   ? process.env.RENDEZVOUS_MULTIADDR.split(',')

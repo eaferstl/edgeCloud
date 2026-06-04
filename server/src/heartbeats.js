@@ -19,8 +19,11 @@ export function watchHeartbeats(libp2p, log = console.log, onChange = () => {}) 
       // Backward/forward compatible: accept a bare {peerId,ts} or a full record.
       const peerId = rec.peerId;
       if (typeof peerId !== 'string' || peerId.length === 0 || peerId.length > 128) return;
+      // The gossipsub message's source IS the worker's transport peerId — so we
+      // can resolve its IP even for workers that don't self-report libp2pPeerId.
+      const fromPeer = evt.detail.from && evt.detail.from.toString ? evt.detail.from.toString() : null;
       if (!devices.has(peerId)) log(`[heartbeat] worker online: ${peerId}`);
-      devices.set(peerId, { record: rec, lastSeen: Date.now() });
+      devices.set(peerId, { record: rec, lastSeen: Date.now(), transportPeerId: rec.libp2pPeerId || fromPeer });
       onChange(); // each heartbeat may change load/capacity → push a fresh snapshot
     } catch {
       /* ignore malformed heartbeats */
@@ -67,6 +70,7 @@ export function watchHeartbeats(libp2p, log = console.log, onChange = () => {}) 
   // sensitive — these are host capability facts, no PII).
   function summary(peerId, d) {
     const r = d.record || {};
+    const transportPeerId = d.transportPeerId || r.libp2pPeerId || null;
     return {
       peerId,
       hostname: r.hostname ?? null,
@@ -78,8 +82,8 @@ export function watchHeartbeats(libp2p, log = console.log, onChange = () => {}) 
       currentLoad: r.currentLoad ?? null,
       availableCapacity: r.availableCapacity ?? null,
       // --- live-map fields ---
-      ip: ipFor(r.libp2pPeerId), // server-observed source IP (null if relayed/unknown)
-      libp2pPeerId: r.libp2pPeerId ?? null,
+      ip: ipFor(transportPeerId), // server-observed source IP (null if relayed/unknown)
+      libp2pPeerId: transportPeerId,
       // proximity to the rendezvous: filled in once the latency work lands (the
       // worker can carry rttMs in its heartbeat); the UI lays out by this.
       rttMs: typeof r.rttMs === 'number' ? r.rttMs : null,

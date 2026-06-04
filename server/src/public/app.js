@@ -654,17 +654,19 @@ function renderViz(s) {
       n._nm = svgEl('text', { class: 'nm', 'text-anchor': 'middle', y: -36 });
       n._ip = svgEl('text', { class: 'ip', 'text-anchor': 'middle', y: 41 });
       n._px = svgEl('text', { class: 'px', 'text-anchor': 'middle', y: 58 });
-      n.appendChild(n._nm); n.appendChild(n._ip); n.appendChild(n._px);
+      n._gpu = svgEl('text', { class: 'gpu-badge', 'text-anchor': 'middle', y: 74 });
+      n.appendChild(n._nm); n.appendChild(n._ip); n.appendChild(n._px); n.appendChild(n._gpu);
       VIZ.layers.nodes.appendChild(n); VIZ.nodeEls[id] = n;
     }
     n.setAttribute('transform', 'translate(' + p.x + ',' + p.y + ')');
-    n.setAttribute('class', 'viz-node ' + statusCls + (n.classList.contains('pulsing') ? ' pulsing' : ''));
+    n.setAttribute('class', 'viz-node ' + statusCls + (d.gpu ? ' gpu' : '') + (n.classList.contains('pulsing') ? ' pulsing' : ''));
     n._nm.textContent = (d.peerId || '').slice(0, 8);
     n._ip.textContent = d.ip || '—';
     var hops = d.link === 'direct' ? '1 hop' : d.link === 'relay' ? '2 hops' : null;
     n._px.textContent = (typeof d.rttMs === 'number')
       ? ('~' + Math.round(d.rttMs) + ' ms' + (hops ? ' · ' + hops : ''))
       : (hops || '—');
+    n._gpu.textContent = d.gpu ? ('⚡ GPU' + (d.models && d.models[0] ? ' · ' + d.models[0] : '')) : '';
   });
 
   // remove departed workers

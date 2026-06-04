@@ -63,6 +63,38 @@ It will appear at http://146.190.123.91/api/status (`workersOnline`, identified 
 `-e RENDEZVOUS_MULTIADDR=/ip4/<host>/tcp/4002/ws/p2p/<peerId>`. The container blocks egress
 to private IPs so submitted code can't reach your LAN.
 
+<a id="gpu-worker"></a>
+#### Optional: a GPU worker (LLM inference jobs)
+
+A worker with a GPU can run **`type:"inference"`** jobs — the "🤖 Ask the AI" path on the
+webform. The GPU stays on your **host**: the worker just `curl`s your host's
+**OpenAI-compatible** endpoint (llama-swap / Ollama / `llama-server` — anything serving
+`/v1/chat/completions`), so there's **no `nvidia-container-toolkit` / `--gpus` needed inside
+the container**. The election routes inference jobs *only* to GPU-capable workers
+(capability-aware), and `minCores`/`minRamBytes` on a job are honored the same way.
+
+Two env vars enable it (point the worker at the endpoint + let the firewall reach it):
+
+```bash
+# the host's OpenAI-compatible base URL (we append /v1/chat/completions)
+-e EDGECLOUD_LLM_URL=http://<HOST>:9090
+# allow the worker (root) to reach just that host — the sandbox uid stays fully blocked
+-e EDGECLOUD_FIREWALL_ALLOW=<HOST>/32
+# optional: default model + bearer key
+-e EDGECLOUD_LLM_MODEL=lfm2.5-8b-a1b  -e EDGECLOUD_LLM_API_KEY=<key>
+```
+
+What `<HOST>` is, by how the worker container reaches your machine:
+
+| Worker runs in… | `<HOST>` | extra |
+|---|---|---|
+| Docker on the Linux host directly | `172.17.0.1` (docker bridge gateway) | or `host.docker.internal` with `--add-host=host.docker.internal:host-gateway` |
+| Docker **inside a QEMU/KVM VM** (user-net) | `10.0.2.2` (QEMU's host alias) | the host endpoint is reached through QEMU's slirp gateway |
+
+Make sure your inference server is reachable from the container's network (bind it so the
+gateway can reach it). Then submit "🤖 Ask the AI" from the webform and the prompt runs on
+your GPU worker, with the answer flowing back and replicating like any other result.
+
 ### 3. Operator — run your own central/rendezvous server
 
 Runs the relay + OrbitDB peer + webform. Servers are interchangeable and hold **no unique

@@ -219,6 +219,11 @@ async function populateExamples() {
     o.textContent = ex.label;
     sel.appendChild(o);
   });
+  // GPU/LLM inference — routes only to a worker that has a GPU endpoint.
+  var aiOpt = document.createElement('option');
+  aiOpt.value = 'inference:ask';
+  aiOpt.textContent = '🤖 Ask the AI (GPU / LLM)';
+  sel.appendChild(aiOpt);
   try {
     var res = await fetch('/api/modules');
     wasmModules = (await res.json()).modules || [];
@@ -240,10 +245,17 @@ function selectedExample() {
 
 function onExampleChange() {
   var sel = selectedExample();
-  if (sel.kind === 'js') {
+  var lbl = document.querySelector('label[for="jsInput"]');
+  if (sel.kind === 'inference') {
+    $('jsEditor').hidden = false;
+    $('wasmInfo').hidden = true;
+    if (lbl) lbl.textContent = 'Prompt — answered by an LLM on a GPU worker';
+    $('jsInput').value = 'In one sentence, what is a decentralized compute network?';
+  } else if (sel.kind === 'js') {
     var ex = JS_EXAMPLES.find(function (e) { return e.id === sel.id; });
     $('jsEditor').hidden = false;
     $('wasmInfo').hidden = true;
+    if (lbl) lbl.innerHTML = 'JavaScript (a bare expression gets wrapped in <code>console.log(…)</code>)';
     $('jsInput').value = ex ? ex.code : '';
   } else {
     var m = wasmModules.find(function (x) { return x.name === sel.id; });
@@ -310,7 +322,14 @@ $('submitBtn').addEventListener('click', async function () {
   try {
     var sel = selectedExample();
     var manifest, entryBytes, labelText;
-    if (sel.kind === 'js') {
+    if (sel.kind === 'inference') {
+      var prompt = $('jsInput').value.trim();
+      if (!prompt) throw new Error('enter a prompt first');
+      labelText = '🤖 ' + (prompt.length > 50 ? prompt.slice(0, 47) + '…' : prompt);
+      // inference routes only to a GPU worker; give the model up to the max.
+      manifest = { v: 1, type: 'inference', entry: 'prompt.txt', args: [], timeoutMs: 60000, label: labelText };
+      entryBytes = utf8Bytes(prompt);
+    } else if (sel.kind === 'js') {
       var src = prepareJsSource($('jsInput').value);
       labelText = src.length > 60 ? src.slice(0, 57) + '…' : src;
       manifest = { v: 1, type: 'js', entry: 'main.js', args: [], timeoutMs: DEFAULT_JOB_TIMEOUT_MS, label: labelText };

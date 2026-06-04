@@ -10,7 +10,7 @@
 
 import { zipSync, unzipSync, strToU8, strFromU8 } from 'fflate';
 import { canonicalJson } from './canonical.js';
-import { validateManifest, JS_ENTRY, WASM_ENTRY } from './manifest.js';
+import { validateManifest, JS_ENTRY, WASM_ENTRY, INFERENCE_ENTRY } from './manifest.js';
 import { ZIP_FIXED_MTIME_MS, MAX_ZIP_B64_BYTES } from './constants.js';
 
 /**
@@ -54,7 +54,7 @@ export function parseJobZipB64(zipB64) {
   const err = validateManifest(manifest);
   if (err) throw new Error(`invalid manifest: ${err}`);
   if (!files[manifest.entry]) throw new Error(`zip missing entry file ${manifest.entry}`);
-  const allowed = new Set(['manifest.json', JS_ENTRY, WASM_ENTRY]);
+  const allowed = new Set(['manifest.json', JS_ENTRY, WASM_ENTRY, INFERENCE_ENTRY]);
   for (const n of names) {
     if (!allowed.has(n)) throw new Error(`unexpected file in zip: ${n}`);
   }

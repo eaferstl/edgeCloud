@@ -95,6 +95,8 @@ export function watchHeartbeats(libp2p, log = console.log, onChange = () => {}) 
       maxConcurrent: r.maxConcurrent ?? null,
       currentLoad: r.currentLoad ?? null,
       availableCapacity: r.availableCapacity ?? null,
+      gpu: !!r.gpu, // GPU/LLM-inference capable
+      model: r.gpu ? (r.model ?? null) : null,
       // --- live-map fields ---
       ip: ipFor(transportPeerId), // server-observed source IP (null if relayed/unknown)
       libp2pPeerId: transportPeerId,

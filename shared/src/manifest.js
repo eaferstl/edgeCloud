@@ -9,13 +9,14 @@ import { DEFAULT_JOB_TIMEOUT_MS, MAX_JOB_TIMEOUT_MS } from './constants.js';
 
 export const JS_ENTRY = 'main.js';
 export const WASM_ENTRY = 'module.wasm';
+export const INFERENCE_ENTRY = 'prompt.txt';
 
 // Runtimes a worker is willing to spawn for type:"wasm" jobs.
 export const ALLOWED_WASM_RUNTIMES = ['wasmtime'];
 
-const ENTRY_BY_TYPE = { js: JS_ENTRY, wasm: WASM_ENTRY };
+const ENTRY_BY_TYPE = { js: JS_ENTRY, wasm: WASM_ENTRY, inference: INFERENCE_ENTRY };
 
-export function buildManifest({ type, args = [], timeoutMs = DEFAULT_JOB_TIMEOUT_MS, label = '' }) {
+export function buildManifest({ type, args = [], timeoutMs = DEFAULT_JOB_TIMEOUT_MS, label = '', minCores, minRamBytes, model }) {
   const manifest = {
     v: 1,
     type,
@@ -30,6 +31,13 @@ export function buildManifest({ type, args = [], timeoutMs = DEFAULT_JOB_TIMEOUT
     // egress firewall are the sandbox.
     manifest.command = ['wasmtime', 'run', '--dir', '.', WASM_ENTRY];
   }
+  // 'inference' jobs run on a GPU/LLM worker; an optional model hint asks for a
+  // specific model (the worker maps it to its local endpoint).
+  if (type === 'inference' && model) manifest.model = String(model);
+  // Optional capability requirements — only a worker that meets these may claim
+  // the job (see shared/src/capability.js + the election).
+  if (minCores != null) manifest.minCores = minCores;
+  if (minRamBytes != null) manifest.minRamBytes = minRamBytes;
   const err = validateManifest(manifest);
   if (err) throw new Error(`invalid manifest: ${err}`);
   return manifest;
@@ -39,7 +47,7 @@ export function buildManifest({ type, args = [], timeoutMs = DEFAULT_JOB_TIMEOUT
 export function validateManifest(m) {
   if (!m || typeof m !== 'object' || Array.isArray(m)) return 'not an object';
   if (m.v !== 1) return 'unsupported manifest version';
-  if (m.type !== 'js' && m.type !== 'wasm') return 'type must be "js" or "wasm"';
+  if (m.type !== 'js' && m.type !== 'wasm' && m.type !== 'inference') return 'type must be "js", "wasm", or "inference"';
   if (m.entry !== ENTRY_BY_TYPE[m.type]) return `entry must be ${ENTRY_BY_TYPE[m.type]}`;
   if (!Array.isArray(m.args) || !m.args.every((a) => typeof a === 'string')) {
     return 'args must be an array of strings';
@@ -63,7 +71,21 @@ export function validateManifest(m) {
       return 'command must not contain absolute paths or ..';
     }
   } else if (m.command !== undefined) {
-    return 'js manifest must not set command';
+    return 'only wasm manifests may set command';
+  }
+  if (m.type === 'inference') {
+    if (m.model !== undefined && (typeof m.model !== 'string' || m.model.length > 128)) {
+      return 'model must be a short string';
+    }
+  } else if (m.model !== undefined) {
+    return 'only inference manifests may set model';
+  }
+  // optional capability requirements
+  if (m.minCores !== undefined && (typeof m.minCores !== 'number' || m.minCores <= 0 || m.minCores > 1024)) {
+    return 'minCores must be a positive number';
+  }
+  if (m.minRamBytes !== undefined && (!Number.isInteger(m.minRamBytes) || m.minRamBytes <= 0)) {
+    return 'minRamBytes must be a positive integer';
   }
   return null;
 }

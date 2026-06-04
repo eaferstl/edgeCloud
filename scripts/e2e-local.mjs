@@ -111,7 +111,7 @@ async function main() {
 
   // seed an allowlist CSV and import it
   const csv = path.join(tmp, 'attendees.csv');
-  fs.writeFileSync(csv, 'First,Last,Email\n' + ['a', 'b', 'c', 'd', 'e', 'limit'].map((x) => `T,U,${x}@e2e.test`).join('\n') + '\n');
+  fs.writeFileSync(csv, 'First,Last,Email\n' + ['a', 'b', 'c', 'd', 'e', 'limit', 'w1', 'w2'].map((x) => `T,U,${x}@e2e.test`).join('\n') + '\n');
   await new Promise((res, rej) => {
     const imp = spawn(NODE, ['server/src/allowlist-import.js', csv],
       { cwd: REPO, env: { ...process.env, EDGECLOUD_DATA: serverData, EDGECLOUD_SHARED_SALT: SALT } });
@@ -139,8 +139,9 @@ async function main() {
     startProc(id, ['worker/src/index.js'], {
       EDGECLOUD_DATA: wd, EDGECLOUD_GENESIS_KEY: GENESIS, RENDEZVOUS_MULTIADDR: wsAddr,
       EDGECLOUD_HTTP_FALLBACK: BASE, EDGECLOUD_SKIP_FIREWALL: '1',
+      EDGECLOUD_EMAIL: `${id}@e2e.test`, // workers register their identity key
     }, (line) => {
-      const m = /\[boot\] peerId: (\S+)/.exec(line);
+      const m = /\[boot\] peerId(?: \(transport\))?: (\S+)/.exec(line);
       if (m) workerPeer[id] = m.group?.[1] || m[1];
       if (/won claim round 0 — executing/.test(line)) workerPeer[`${id}_won`] = true;
     });
@@ -223,7 +224,21 @@ async function main() {
     check('first 4 keys accepted', codes.every((c) => c === 200), `statuses ${codes}`);
     const fifth = await api('POST', '/api/register', { email, pubkey: generateKeypair().publicKey });
     check('5th key rejected with 409', fifth.status === 409, `got ${fifth.status}`);
-    check('rejection mentions the limit', /4 registered keys/.test(fifth.body.error || ''), fifth.body.error);
+    check('rejection mentions the limit', /maximum of 4 user keys/.test(fifth.body.error || ''), fifth.body.error);
+  }
+
+  log('\n▶ Scenario 6b: max 25 worker keys per email (26th → 409)');
+  {
+    const email = 'w1@e2e.test'; // already has w1's own worker key registered at boot
+    let lastOk = 0;
+    let rejected = null;
+    for (let i = 0; i < 30; i++) {
+      const r = await api('POST', '/api/register-worker', { email, pubkey: generateKeypair().publicKey });
+      if (r.status === 200) lastOk++;
+      else { rejected = r; break; }
+    }
+    check('worker registrations rejected at the 25-per-email cap', rejected?.status === 409, `rejected=${JSON.stringify(rejected?.body)}`);
+    check('rejection mentions the worker limit', /maximum of 25 worker keys/.test(rejected?.body?.error || ''), rejected?.body?.error);
   }
 
   log(`\n${failures === 0 ? '✅ ALL SCENARIOS PASSED' : `❌ ${failures} CHECK(S) FAILED`}`);

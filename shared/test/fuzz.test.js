@@ -49,21 +49,23 @@ function shuffle(r, arr) {
 // ========================================================================
 // claimWinner — the heart of the exactly-once protocol
 // ========================================================================
-test('fuzz: claimWinner is permutation-invariant and picks one valid peer', () => {
+test('fuzz: claimWinner is permutation-invariant and picks one valid worker', () => {
   for (const seed of SEEDS) {
     const r = rng(seed);
     for (let iter = 0; iter < 40; iter++) {
       const jobId = randHex(r, 64);
       const round = Math.floor(r() * 5);
       const nPeers = 1 + Math.floor(r() * 8);
-      const peers = Array.from({ length: nPeers }, (_, i) => `peer-${i}-${randHex(r, 6)}`);
-      // build claims for this (jobId, round), plus NOISE for other jobs/rounds
-      const claims = peers.map((p) => buildClaim(jobId, p, round));
+      // worker identity = a real Ed25519 keypair; claims are SIGNED with it
+      const peers = Array.from({ length: nPeers }, () => generateKeypair());
+      const keys = peers.map((p) => p.publicKey);
+      const claims = peers.map((p) => buildClaim(jobId, p.publicKey, round, p.secretKey));
       // noise that must NEVER be a candidate for (jobId, round): either a
       // different jobId, or a round guaranteed != round (round+5 .. round+14).
-      const noise = Array.from({ length: Math.floor(r() * 6) }, () =>
-        buildClaim(pick(r, [jobId, randHex(r, 64)]), pick(r, peers) + '!', round + 5 + Math.floor(r() * 10))
-      );
+      const noise = Array.from({ length: Math.floor(r() * 6) }, () => {
+        const k = generateKeypair();
+        return buildClaim(pick(r, [jobId, randHex(r, 64)]), k.publicKey, round + 5 + Math.floor(r() * 10), k.secretKey);
+      });
       const all = [...claims, ...noise];
 
       const w1 = claimWinner(jobId, round, all);
@@ -72,13 +74,13 @@ test('fuzz: claimWinner is permutation-invariant and picks one valid peer', () =
         const w = claimWinner(jobId, round, shuffle(r, all));
         assert.equal(w, w1, `seed ${seed}: winner changed under permutation`);
       }
-      // winner is one of the real candidates (noise peers end with '!' or wrong round/job)
-      assert.ok(peers.includes(w1), `seed ${seed}: winner not a candidate`);
+      // winner is one of the real candidate keys (noise is wrong round/job)
+      assert.ok(keys.includes(w1), `seed ${seed}: winner not a candidate`);
       // duplicate claims must not change the winner
       const w2 = claimWinner(jobId, round, [...all, ...claims, ...claims]);
       assert.equal(w2, w1, `seed ${seed}: duplicates changed winner`);
       // the winner has the globally-minimal rank among candidates
-      const minRank = Math.min(...peers.map((p) => parseInt(claimRank(jobId, p, round).slice(0, 13), 16)));
+      const minRank = Math.min(...keys.map((p) => parseInt(claimRank(jobId, p, round).slice(0, 13), 16)));
       assert.equal(parseInt(claimRank(jobId, w1, round).slice(0, 13), 16), minRank);
     }
   }
@@ -88,31 +90,43 @@ test('fuzz: claimWinner ignores other rounds/jobs entirely', () => {
   for (const seed of SEEDS) {
     const r = rng(seed);
     const jobId = randHex(r, 64);
-    const claims = [buildClaim(jobId, 'a', 0), buildClaim(jobId, 'b', 0)];
+    const a = generateKeypair();
+    const b = generateKeypair();
+    const claims = [buildClaim(jobId, a.publicKey, 0, a.secretKey), buildClaim(jobId, b.publicKey, 0, b.secretKey)];
     assert.equal(claimWinner(jobId, 1, claims), null);
     assert.equal(claimWinner(randHex(r, 64), 0, claims), null);
   }
 });
 
 // ========================================================================
-// validateClaim — gate before claimWinner (claims DB is open-write)
+// validateClaim — gate before claimWinner (claims DB is open-write). Claims
+// are SIGNED and key-bound (anti-grind, R-010), so any field mutation must be
+// rejected either on shape OR on the signature.
 // ========================================================================
 test('fuzz: validateClaim accepts well-formed, rejects single-field mutations', () => {
   for (const seed of SEEDS) {
     const r = rng(seed);
     for (let i = 0; i < 30; i++) {
-      const good = { v: 1, jobId: randHex(r, 64), peerId: 'p' + randHex(r, 10), round: Math.floor(r() * 64), ts: Date.now() };
+      const kp = generateKeypair();
+      const jobId = randHex(r, 64);
+      const round = Math.floor(r() * 64);
+      const good = buildClaim(jobId, kp.publicKey, round, kp.secretKey);
       assert.equal(validateClaim(good), null);
-      // mutate one field into something invalid
+      const otherKey = generateKeypair().publicKey;
+      // mutate one field — invalid by shape OR by broken signature
       const mut = pick(r, [
         { ...good, v: 2 },
         { ...good, jobId: randHex(r, 63) }, // wrong length
-        { ...good, jobId: randHex(r, 64).toUpperCase() }, // non-lowercase-hex
-        { ...good, peerId: '' },
-        { ...good, peerId: 'x'.repeat(129) },
+        { ...good, jobId: randHex(r, 64) }, // valid shape, but sig no longer matches
+        { ...good, workerKey: '' },
+        { ...good, workerKey: 'not-a-key' },
+        { ...good, workerKey: otherKey }, // real key, but not the signer
         { ...good, round: -1 },
         { ...good, round: 65 },
         { ...good, round: 1.5 },
+        { ...good, round: round === 0 ? 2 : 0 }, // valid round, but sig is over the original
+        { ...good, sig: undefined },
+        { ...good, sig: toB64(new Uint8Array(64)) }, // well-formed but wrong signature
       ]);
       assert.notEqual(validateClaim(mut), null, `seed ${seed}: bad claim accepted: ${JSON.stringify(mut)}`);
     }

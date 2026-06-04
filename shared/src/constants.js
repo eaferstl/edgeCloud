@@ -51,7 +51,13 @@ export const MAX_ZIP_B64_BYTES = 4 * 1024 * 1024;  // 4 MiB of base64 payload
 export const MAX_OUTPUT_BYTES = 256 * 1024;        // stdout/stderr capture cap
 
 // Registration limits.
-export const MAX_KEYS_PER_EMAIL = 4;
+export const MAX_KEYS_PER_EMAIL = 4; // browser/user identity keys per attendee email
+// Worker nodes per attendee email. Higher than the user-key cap (one person may
+// legitimately run several machines), but still bounded for Sybil / work-
+// stealing resistance: an attacker is limited to 25 worker identities per
+// allowlisted email rather than the unbounded supply of free keypairs that the
+// original anonymous-worker design allowed (THREAT_MODEL.md R-010).
+export const MAX_WORKERS_PER_EMAIL = 25;
 
 // Auth.
 export const CHALLENGE_TTL_MS = 120000;     // signed-nonce challenges expire after 2 min

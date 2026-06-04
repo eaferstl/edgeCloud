@@ -1,23 +1,28 @@
-// The claim protocol (claims log + deterministic tiebreak; see shared/claims.js
-// for why this converges):
+// The claim protocol (signed claims log + deterministic tiebreak; see
+// shared/src/claims.js for why this converges and why claims are signed):
 //
 //   verify signature -> registry check (with re-sync grace) -> cached? ->
-//   claim(round) -> settle window -> deterministic winner ->
-//   winner executes & writes result | losers wait, take over at round+1
+//   SIGNED claim(round) -> settle window -> deterministic winner among
+//   REGISTERED, validly-signed claimants -> winner executes & SIGNS result |
+//   losers wait, take over at round+1
 //
-// Results are idempotent by jobId (documents DB keyed by _id = jobId), so the
-// rare double-execution under partition collapses to one logical result.
+// Worker identity is a registered Ed25519 key (its base64 public key); claims
+// and results are signed with it. Two workers seeing the same valid claim set
+// agree on the winner. Results are idempotent by jobId, so a rare double-
+// execution under partition collapses to one logical result.
 //
-// TESTABILITY: the claim logic depends only on an injected { store, clock,
-// executeJob } seam. In production those default to the OrbitDB databases, the
-// real wall clock, and the real executor — so callers pass nothing extra. A
-// deterministic simulation (worker/test/coordination-sim.test.js) injects an
-// in-memory partition-aware store + virtual clock to exercise races, partitions,
-// dead winners, and takeover against THIS exact code (not a reimplementation).
+// Anti-grind (THREAT_MODEL.md R-010): the winner = min sha256(jobId|workerKey|
+// round) over claims that (a) carry a valid SIGNATURE by `workerKey` and (b)
+// whose `workerKey` is a REGISTERED, allowlisted worker. So an attacker can't
+// claim with arbitrary/grindable strings — they must own a registered key, and
+// registration is bounded by the attendee allowlist (≤4 keys/email).
+//
+// TESTABILITY: depends only on an injected { store, clock, executeJob } seam;
+// production defaults to OrbitDB + wall clock + the real executor.
 
 import { verifyEnvelope } from '@edgecloud/shared/envelope.js';
 import { buildClaim, validateClaim, claimWinner } from '@edgecloud/shared/claims.js';
-import { buildResult } from '@edgecloud/shared/result.js';
+import { buildResult, verifyResult } from '@edgecloud/shared/result.js';
 import { allEventValues, getResultDoc } from '@edgecloud/shared/orbit.js';
 import { parseJobZipB64 } from '@edgecloud/shared/zip.js';
 import {
@@ -43,7 +48,8 @@ export function makeOrbitStore(databases) {
 export function createCoordinator({
   databases,
   registry,
-  peerId,
+  workerKey, // base64 Ed25519 public key — this worker's registered identity
+  workerSecretKey, // base64 secret key for signing claims + results
   maxConcurrent = 4,
   log = console.log,
   // --- injectable seam (defaults = production) ---
@@ -60,8 +66,6 @@ export function createCoordinator({
   };
   const inFlight = new Set();
 
-  // Live scheduling state, published in each heartbeat (device schema D-A,
-  // from chaodoze's registry). currentLoad tracks ACTUAL running executions.
   const live = {
     status: 'available',
     maxConcurrent,
@@ -70,6 +74,19 @@ export function createCoordinator({
       return Math.max(0, this.maxConcurrent - this.currentLoad);
     },
   };
+
+  // A result only "exists" if it's present AND validly signed by its executor —
+  // so a forged (bad-sig) result can't make an honest worker skip execution.
+  async function validResult(jobId) {
+    const r = await store.getResult(jobId);
+    return r && verifyResult(r) === null ? r : null;
+  }
+
+  // Accept a claim only if it is well-formed + signed by workerKey AND that
+  // workerKey is a registered, allowlisted worker.
+  function acceptedClaims(rawClaims) {
+    return rawClaims.filter((c) => validateClaim(c) === null && registry.isVerified(c.workerKey));
+  }
 
   async function handleJob(env) {
     if (!env || typeof env.jobId !== 'string') return;
@@ -89,12 +106,11 @@ export function createCoordinator({
         log(`[job ${short}] rejected: submitter not in registry (after grace)`);
         return;
       }
-      // 3. replay/cache: existing result wins
-      if (await store.getResult(jid)) {
+      // 3. replay/cache: an existing, validly-signed result wins
+      if (await validResult(jid)) {
         log(`[job ${short}] already has a result; nothing to do`);
         return;
       }
-      // parse now so we know the timeout for round pacing
       let manifest;
       try {
         ({ manifest } = parseJobZipB64(env.zipB64));
@@ -106,22 +122,22 @@ export function createCoordinator({
 
       // 4. claim rounds
       for (let round = 0; round < t.maxClaimRounds; round++) {
-        await store.addClaim(buildClaim(jid, peerId, round));
+        await store.addClaim(buildClaim(jid, workerKey, round, workerSecretKey));
         await clock.sleep(t.claimSettleMs);
-        if (await store.getResult(jid)) return;
+        if (await validResult(jid)) return;
 
-        const claims = (await store.readClaims()).filter((c) => validateClaim(c) === null);
+        const claims = acceptedClaims(await store.readClaims());
         const winner = claimWinner(jid, round, claims);
-        if (winner === peerId) {
+        if (winner === workerKey) {
           log(`[job ${short}] won claim round ${round} — executing (${manifest.type}: ${manifest.label || 'unlabeled'})`);
           await executeAndPublish(env, jid, short);
           return;
         }
-        log(`[job ${short}] round ${round} winner is ${winner?.slice(-8)} — standing by`);
+        log(`[job ${short}] round ${round} winner is ${winner?.slice(0, 8)}… — standing by`);
         const deadline = clock.now() + jobTimeout + t.resultMarginMs;
         while (clock.now() < deadline) {
           await clock.sleep(t.pollMs);
-          if (await store.getResult(jid)) return;
+          if (await validResult(jid)) return;
         }
         log(`[job ${short}] no result from round-${round} winner; taking over (round ${round + 1})`);
       }
@@ -134,15 +150,15 @@ export function createCoordinator({
   }
 
   async function executeAndPublish(env, jid, short) {
-    live.currentLoad++; // reflected in the next heartbeat's availableCapacity
+    live.currentLoad++;
     try {
       const r = await executeJob(env);
-      // last-moment dedup: someone may have raced us
-      if (await store.getResult(jid)) {
+      if (await validResult(jid)) {
         log(`[job ${short}] executed but a result already replicated; discarding duplicate`);
         return;
       }
-      const result = buildResult({ ...r, jobId: jid, executedBy: peerId });
+      // result is SIGNED by this worker's identity key (executedBy = workerKey)
+      const result = buildResult({ ...r, jobId: jid, executedBy: workerKey, secretKeyB64: workerSecretKey });
       await store.putResult(jid, result);
       log(`[job ${short}] result published (exit ${result.exitCode}, ${result.stdout.length}B stdout)`);
     } finally {

@@ -71,10 +71,10 @@ no address exchange. **No raw email ever touches OrbitDB.**
 
 | DB (`shared/src/constants.js`) | Type | Holds |
 |---|---|---|
-| `edgecloud-registry-v1` | events | server-attested user pubkeys: `{ pubkey, emailHmac, addedAt, attestedBy, attestSig }` |
+| `edgecloud-registry-v1` | events | server-attested pubkeys (user + worker): `{ pubkey, emailHmac, role, addedAt, attestedBy, attestSig }` (`role`∈{user,worker}, advisory/unsigned) |
 | `edgecloud-jobs-v1` | events | signed job envelopes (the queue) |
-| `edgecloud-claims-v1` | events | `{ jobId, peerId, round, ts }` execution claims |
-| `edgecloud-results-v1` | documents (`_id`=jobId) | result envelopes, deduped by jobId |
+| `edgecloud-claims-v1` | events | `{ v, jobId, workerKey, round, ts, sig }` — **signed** execution claims, key-bound to a registered worker |
+| `edgecloud-results-v1` | documents (`_id`=jobId) | result envelopes (**signed** by the worker), deduped by jobId |
 | `edgecloud-servers-v1` | events | server-onboarding endorsements (trust chain) |
 
 ## Job envelope, manifest, result
@@ -119,9 +119,10 @@ Built in `shared/src/{envelope,zip,manifest,result}.js`, identically in the brow
   becomes stdout.
 
 ```jsonc
-// result: worker → edgecloud-results (key = jobId)
+// result: worker → edgecloud-results (key = jobId). SIGNED by the worker.
 { "v":1, "jobId":"…", "stdout":"…", "stderr":"", "exitCode":0, "ok":true,
-  "error":null, "executedBy":"<peerId>", "startedAt":…, "timestamp":… }
+  "error":null, "executedBy":"<worker base64 Ed25519 pubkey>", "startedAt":…,
+  "timestamp":…, "sig":"<b64 sig over the canonical result by executedBy>" }
 ```
 
 ## Exactly-once-ish execution (claims log + deterministic tiebreak)
@@ -130,16 +131,23 @@ OrbitDB is a CRDT, so under partition you cannot get hard exactly-once; we pick 
 strategy that keeps duplicates near-zero and harmless (`worker/src/coordination.js`,
 `shared/src/claims.js`):
 
-1. Worker sees a job → **verify signature first**.
+0. **Worker identity & registration** (boot): a worker loads a persistent, non-rotatable
+   Ed25519 key (`worker/src/worker-key.js`) — its base64 public key **is** its identity —
+   and registers it against an allowlisted attendee email (`EDGECLOUD_EMAIL`, ≤25
+   workers/email) before participating. Claims and results are signed with this key.
+1. Worker sees a job → **verify the submitter's envelope signature first**.
 2. **Registry check with re-sync grace**: if the submitter's key is unknown, wait
    for the registry to replicate (poll + HTTP fallback) before rejecting — *never
    reject on stale data*.
-3. If a result already exists → done (cache).
-4. Append a claim for round 0 → wait a settle window → compute the **winner
-   deterministically** (`min sha256(jobId|peerId|round)`), which every worker
-   agrees on regardless of message order.
-5. Winner executes and writes the result; losers watch the results DB and, if no
-   result appears within a timeout, re-claim at round+1 (handles a dead winner).
+3. If a validly-signed result already exists → done (cache); a forged/unsigned result is
+   ignored.
+4. Append a **signed** claim for round 0 → wait a settle window → compute the **winner
+   deterministically** (`min sha256(jobId|workerKey|round)`) over claims that are
+   signature-valid **and** from a **registered worker**, which every worker agrees on
+   regardless of message order. Binding the tiebreak input to a registered, signed key is
+   what defeats claim-grinding / work-stealing (`THREAT_MODEL.md` R-010).
+5. Winner executes and writes the **signed** result; losers watch the results DB and, if
+   no result appears within a timeout, re-claim at round+1 (handles a dead winner).
 6. Results are idempotent by jobId, so a rare double-execution collapses to one
    record.
 

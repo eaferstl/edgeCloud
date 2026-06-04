@@ -18,10 +18,10 @@ Ed25519 auth; no raw emails ever stored):
 
 | DB | Type | Producer → Consumer | Payload |
 |---|---|---|---|
-| `edgecloud-registry-v1` | events | Server → Workers | `{ pubkey, emailHmac, addedAt, attestedBy, attestSig }` |
+| `edgecloud-registry-v1` | events | Server → Workers | `{ pubkey, emailHmac, role, addedAt, attestedBy, attestSig }` — `role`∈{`user`,`worker`}, advisory (not in the signed attestation message; legacy entries ⇒ `user`) |
 | `edgecloud-jobs-v1` | events | Server (for browser) → Workers | job envelope (below) |
-| `edgecloud-claims-v1` | events | Worker → Workers | `{ jobId, peerId, round, ts }` |
-| `edgecloud-results-v1` | documents (`_id`=jobId) | Worker → Server → browser | result envelope (below) |
+| `edgecloud-claims-v1` | events | Worker → Workers | `{ v, jobId, workerKey, round, ts, sig }` — **signed**; `workerKey` = registered worker's base64 Ed25519 pubkey; `sig` over `jobId\|workerKey\|round` |
+| `edgecloud-results-v1` | documents (`_id`=jobId) | Worker → Server → browser | result envelope (below), **signed** by the worker |
 | `edgecloud-servers-v1` | events | Server → all | `{ serverPubkey, multiaddrs, label, addedAt, endorsedBy, endorseSig }` |
 
 **Job envelope**: `{ v, jobId=sha256(zipB64), zipB64, pubkey, sig (over jobId hex),
@@ -30,9 +30,12 @@ submittedAt, nonce }`. zip = deterministic STORE zip of `manifest.json` +
 **Manifest**: `{ v, type:"js"|"wasm", entry, args, timeoutMs, command? }`. stdout is
 the output.
 **Result**: `{ v, jobId, stdout, stderr, exitCode, ok, error, executedBy, startedAt,
-timestamp }`.
+timestamp, sig }`. `executedBy` = the executing worker's base64 Ed25519 identity key;
+`sig` = its signature over the canonical result (excluding `sig`/`_id`). Verified before
+caching/serving.
 
-**HTTP endpoints (central server)**: `POST /api/register`, `GET /api/challenge`,
+**HTTP endpoints (central server)**: `POST /api/register` (user key, ≤4/email),
+`POST /api/register-worker` (worker key, ≤25/email), `GET /api/challenge`,
 `POST /api/auth/verify`, `POST /api/jobs`, `GET /api/jobs/:id/status`,
 `GET /api/jobs/:id/result` (challenge/response-gated to the submitter),
 `GET /api/modules`, `GET /api/dbinfo`, `GET /api/status`,

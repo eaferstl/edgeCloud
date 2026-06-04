@@ -121,12 +121,16 @@ compromise of pinned dependencies, or a kernel/hypervisor 0-day (see §10).
   but workers/servers **verify signatures before acting** on registry and job
   entries. A forged job (bad signature, or submitter not in the registry) is dropped.
 - **Residual risk — IMPORTANT**:
-  - **Result spoofing (R-003).** Result documents are **not signed**. Any network
-    participant can write a `result` doc for a `jobId`. The server caches the *first*
-    result it sees per `jobId`. A fast attacker can therefore feed a **wrong answer**
-    to the submitter. We accept this for a compute demo (results are non-sensitive,
-    reproducible); a fix is to sign results with the executing worker's key and have
-    consumers verify. Documented, not mitigated.
+  - **Result spoofing (R-003) — now MITIGATED for third-party forgery.** Result
+    documents are **signed** by the executing worker's identity key (`executedBy` = its
+    base64 Ed25519 public key; `shared/src/result.js`). The server verifies the signature
+    **before** caching/serving (`server/src/indexers.js`) and workers verify before
+    treating a job as done, so the open-write results DB no longer lets an arbitrary
+    participant inject a wrong answer — a forged, unsigned result is dropped and the
+    honest signed one wins. **Still open (documented, not mitigated):** a *registered*
+    worker can sign a **wrong** answer with its own key. Detecting that needs redundant
+    execution / agreement and reputation as a disincentive (see §7b and `ROADMAP.md` §B);
+    signing is the prerequisite that makes both attributable.
   - **Claim spam / griefing.** An attacker can append bogus claims; the deterministic
     tiebreak still picks one peer, but a flood could distort which peer "wins" or add
     noise. Bounded, not exploited for safety (results dedupe by jobId).
@@ -147,9 +151,11 @@ compromise of pinned dependencies, or a kernel/hypervisor 0-day (see §10).
   (identical) result. That is intended (same input → same public output).
 
 ### L6 — Exactly-once coordination under races/partitions (A7)
-- **Design**: claims log + deterministic tiebreak (`min sha256(jobId|peerId|round)`);
-  the winner executes, backups take over after a timeout; results are idempotent by
-  `jobId`.
+- **Design**: claims log + deterministic tiebreak (`min sha256(jobId|workerKey|round)`)
+  over **signed, registered** claims; the winner executes, backups take over after a
+  timeout; results are idempotent by `jobId`. `workerKey` is the worker's non-rotatable
+  base64 Ed25519 identity; `validateClaim` requires a valid signature by it and the
+  coordinator only counts claims whose key is a **registered worker** (R-010 below).
 - **What is guaranteed**: within a set of workers that see the same claims, all agree
   on the winner regardless of message order (fuzz-tested for permutation-invariance,
   §T-Fuzz). In the steady state, exactly one worker executes (verified live).
@@ -166,27 +172,32 @@ compromise of pinned dependencies, or a kernel/hypervisor 0-day (see §10).
   execute. Same harmless outcome (dedupe by `jobId`); the settle window is a tuning
   knob, not a proof. A dead winner is recovered by timeout-based round-N+1 takeover
   (verified live by killing the winner mid-job).
-- **Assumption (load-bearing)**: submitted jobs are **pure/idempotent** (no external
-  side effects), so a rare double-execution is harmless. edgeCloud does not sandbox
-  *side effects*, only resources — see L7.
-- **Residual risk — worker-selection grinding / Sybil (R-010), REAL and practical.**
-  The winner is `min sha256(jobId‖peerId‖round)`; the claims DB is open-write and
-  `validateClaim` checks only shape (not that `claim.peerId` is a registered/attested
-  key the claimant controls), and peerIds are free to generate. So an attacker can
-  **grind candidate peerIds** and win: P(win) = M/(M+K) for M attacker candidates vs K
-  honest claimants, so **M≈10³–10⁴ → ~95–99.9% win against 5–50 workers, in seconds of
-  CPU** (hash-only — no key needed as implemented). Because results are **unsigned and
-  first-result-wins** (L4/R-003), a grinded winner can **silently forge the result** for
-  a targeted job; timeout-takeover does NOT help (it only fires when *no* result is
-  written). Nothing currently bounds it (no registration, stake, PoW, per-worker claim
-  cap, post-lock randomness, or result signature).
-  **Fix (ranked, composable; see `ROADMAP.md` §B):** (1) bind claims to a **registered,
-  non-rotatable worker identity** with a signature, **one claim per worker per round**
-  (turns "grind hash strings" into "create costly identities"); (2) **post-lock
-  randomness / VRF** so the winning value can't be pre-computed; (3) **reputation-weight**
-  selection so fresh disposable identities can't win; (4) **sign results + redundant
-  execution with disagreement detection** (Golem-style) so a malicious winner can't forge
-  undetected. (1)+(4) are the highest-value baseline.
+- **Assumption (load-bearing)**: submitted jobs are **deterministic and side-effect-free**
+  — the sandbox (L7) has no network, so a job is a pure function of its inputs, and the
+  per-`jobId` result write is the idempotent dedup mechanism. So a rare double-execution
+  is harmless. edgeCloud does not sandbox *side effects*, only resources — see L7.
+- **Residual risk — worker-selection grinding / Sybil (R-010): largely MITIGATED, with a
+  bounded remainder.** *Original design (vulnerable):* the winner was
+  `min sha256(jobId‖peerId‖round)` over an open-write claims DB where `validateClaim`
+  checked only shape, and peerIds were free to generate. An attacker could **grind
+  candidate peerIds** and win — P(win) = M/(M+K) for M attacker candidates vs K honest
+  claimants, so **M≈10³–10⁴ → ~95–99.9% win against 5–50 workers, in seconds of CPU**
+  (hash-only, no key needed) — and, since results were unsigned and first-wins, the
+  grinded winner could **silently forge** the result for a targeted job. *Mitigations now
+  implemented:* (1) claims are **signed and key-bound** — the tiebreak input is a worker's
+  Ed25519 public key it must control, so it can't be a forged grindable string (grinding
+  now costs real keypair generation, not a hash loop); (2) worker identities must be
+  **registered against an allowlisted attendee email**, and the coordinator counts claims
+  **only from registered workers**, so the candidate supply is bounded by the allowlist
+  rather than infinite — **≤25 worker keys per email** (plus ≤4 user keys), versus the
+  ~490-attendee list; (3) **results are signed** (R-003), closing the silent-forgery path
+  for third parties. *Bounded remainder (not yet closed):* an attendee can still register
+  up to its per-email quota of distinct worker keys and grind **within that bound** to bias
+  selection, and a registered worker can sign a **wrong** answer. Closing these needs
+  **post-lock randomness / VRF** (so the winning value can't be pre-computed even by
+  registered workers), **reputation-weighted** selection (so fresh in-quota identities
+  can't win), and **redundant execution with disagreement detection + reputation as a
+  disincentive to lie** — see §7b and `ROADMAP.md` §B.
 
 ### L7 — Worker sandbox: hostile submitted code (A2, A6)
 This is the most adversarial layer: **the job author is assumed fully malicious.**
@@ -336,8 +347,27 @@ nature; they are documented here so the gaps above are paired with concrete fixe
    register the key after the link is clicked — turning "on the guest list" into
    "proven control of the inbox," and adding real Sybil resistance.
 
-4. **Sign results** (integrity). Have the executing worker sign its result; consumers
-   verify before trusting it — closing the unsigned-result spoofing gap (R-003).
+4. **Sign results** (integrity). ✅ **IMPLEMENTED.** The executing worker signs its
+   result with its identity key; the server and other workers verify before trusting it,
+   closing the *third-party* unsigned-result spoofing gap (R-003). What remains is a
+   *registered worker lying about its own answer* — see §B-correctness below.
+
+   **B-correctness — detecting wrong answers from a registered worker (future).** Signing
+   proves *who* produced a result, not that it is *correct*. Because jobs are
+   deterministic and side-effect-free, correctness is checkable by **agreement**:
+   - **Redundant execution + disagreement detection** (Golem-style): assign the same job
+     to N independent registered workers; accept the answer only if a quorum agrees, and
+     flag/penalize disagreers.
+   - **Determinism as content-addressing** (the "brilliantly simple" version): since the
+     same job is a pure function of its inputs, honest workers produce **byte-identical**
+     output — so the *hash of the result* is itself the agreement token. Workers publish
+     `hash(result)`; matching hashes from independent identities confirm it with no
+     coordinator, and a mismatch is a provable dispute.
+   - **Reputation as a disincentive to lie**: weight selection and result-acceptance by a
+     per-key / per-email reputation that drops sharply on any detected disagreement, so
+     tampering costs a worker its standing (and, with email-gated identity, is hard to
+     shed). This also disincentivizes the in-quota grinding remainder under R-010.
+   These are **not implemented** for the demo — only signing is. Tracked in `ROADMAP.md` §B.
 
 5. **Decentralize the entry points.** The rendezvous server is the current
    centralization point (NAT traversal + browser bridge), not a trust requirement.

@@ -12,7 +12,7 @@ import { verifyEnvelope } from '@edgecloud/shared/envelope.js';
 import { parseJobZipB64 } from '@edgecloud/shared/zip.js';
 import { createAttestation, createEndorsement } from '@edgecloud/shared/trust.js';
 import { isValidPubkeyB64 } from '@edgecloud/shared/crypto.js';
-import { MAX_KEYS_PER_EMAIL, GENESIS_SERVER_KEY } from '@edgecloud/shared/constants.js';
+import { MAX_KEYS_PER_EMAIL, MAX_WORKERS_PER_EMAIL, GENESIS_SERVER_KEY } from '@edgecloud/shared/constants.js';
 import { requireSession } from '../auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -25,7 +25,10 @@ export function createApp({ q, auth, databases, indexers, heartbeats, serverKey,
 
   // ---------- registration ----------
 
-  app.post('/api/register', async (req, res) => {
+  // Shared registration path for both user (browser) keys and worker (node)
+  // keys. They share the allowlist + attestation machinery but have SEPARATE
+  // per-email Sybil caps: ≤4 user keys, ≤25 worker keys (THREAT_MODEL.md R-010).
+  async function doRegister(req, res, { role, cap }) {
     const { email, pubkey } = req.body || {};
     if (typeof email !== 'string' || !email.includes('@')) {
       return res.status(400).json({ error: 'invalid email' });
@@ -41,21 +44,32 @@ export function createApp({ q, auth, databases, indexers, heartbeats, serverKey,
       // idempotent re-register of the same key
       return res.json({ ok: true, alreadyRegistered: true });
     }
-    if (q.keyCountForHmac(emailHmac) >= MAX_KEYS_PER_EMAIL) {
-      return res.status(409).json({ error: `this email already has ${MAX_KEYS_PER_EMAIL} registered keys` });
+    if (q.keyCountForHmac(emailHmac, role) >= cap) {
+      return res.status(409).json({ error: `this email already has the maximum of ${cap} ${role} keys` });
     }
     // Attest + publish to OrbitDB (pubkey + emailHmac only — never the email).
+    // `role` rides along as advisory metadata (not part of the signed message,
+    // so legacy verifiers/attestations are unaffected).
     const entry = createAttestation({
       pubkey,
       emailHmac,
       serverPublicKeyB64: serverKey.publicKey,
       serverSecretKeyB64: serverKey.secretKey,
     });
+    entry.role = role;
     await databases.registry.add(entry);
-    q.upsertRegisteredKey(pubkey, emailHmac, entry.addedAt);
-    log(`[register] new key ${pubkey.slice(0, 12)}… (${q.keyCountForHmac(emailHmac)}/${MAX_KEYS_PER_EMAIL} for this email)`);
+    q.upsertRegisteredKey(pubkey, emailHmac, entry.addedAt, role);
+    log(`[register] new ${role} key ${pubkey.slice(0, 12)}… (${q.keyCountForHmac(emailHmac, role)}/${cap} for this email)`);
     res.json({ ok: true });
-  });
+  }
+
+  app.post('/api/register', (req, res) => doRegister(req, res, { role: 'user', cap: MAX_KEYS_PER_EMAIL }));
+
+  // Worker-node registration: a worker proves it belongs to an allowlisted
+  // attendee before it can win claims (≤25 worker nodes per email).
+  app.post('/api/register-worker', (req, res) =>
+    doRegister(req, res, { role: 'worker', cap: MAX_WORKERS_PER_EMAIL })
+  );
 
   // Worker fallback for the registry-grace path.
   app.get('/api/registry/:pubkey', (req, res) => {

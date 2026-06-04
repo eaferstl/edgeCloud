@@ -80,14 +80,16 @@ export function getCpu() {
 
 /**
  * Build the full device record for a heartbeat.
- * @param {string} peerId
+ * @param {string} workerKey the worker's base64 Ed25519 identity (its public
+ *   key) — the same accountable identity it signs claims/results with. Carried
+ *   in the `peerId` field for heartbeat wire-compatibility.
  * @param {{status:string,maxConcurrent:number,currentLoad:number,availableCapacity:number}} live
  *   live scheduling state, owned by the worker and mutated as jobs run.
  */
-export async function buildDeviceRecord(peerId, live) {
+export async function buildDeviceRecord(workerKey, live) {
   return {
     v: 1,
-    peerId,
+    peerId: workerKey,
     hostname: os.hostname(),
     cpu: getCpu(), // { cores, arch, platform, load1m } — container-scoped, no host model
     ram: getRam(), // { totalBytes, freeBytes } — container cgroup limit, not host total

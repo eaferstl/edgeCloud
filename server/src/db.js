@@ -21,7 +21,8 @@ export function openDb(dataDir) {
     CREATE TABLE IF NOT EXISTS registered_keys (   -- index over edgecloud-registry
       pubkey     TEXT PRIMARY KEY,
       email_hmac TEXT NOT NULL,
-      added_at   INTEGER NOT NULL
+      added_at   INTEGER NOT NULL,
+      role       TEXT NOT NULL DEFAULT 'user'  -- 'user' (browser) | 'worker' (node)
     );
     CREATE INDEX IF NOT EXISTS idx_regkeys_hmac ON registered_keys(email_hmac);
     CREATE TABLE IF NOT EXISTS job_submitters (    -- index over edgecloud-jobs
@@ -36,6 +37,13 @@ export function openDb(dataDir) {
       cached_at   INTEGER NOT NULL
     );
   `);
+  // Migration for DBs created before the role column existed (it's a rebuildable
+  // cache, but ALTER avoids a forced wipe). Defaults existing rows to 'user'.
+  try {
+    db.exec("ALTER TABLE registered_keys ADD COLUMN role TEXT NOT NULL DEFAULT 'user'");
+  } catch {
+    /* column already exists */
+  }
   return db;
 }
 
@@ -60,12 +68,17 @@ export function makeQueries(db, sharedSalt) {
     // --- registered keys index ---
     upsertRegisteredKey: (() => {
       const stmt = db.prepare(
-        'INSERT OR IGNORE INTO registered_keys (pubkey, email_hmac, added_at) VALUES (?, ?, ?)'
+        'INSERT OR IGNORE INTO registered_keys (pubkey, email_hmac, added_at, role) VALUES (?, ?, ?, ?)'
       );
-      return (pubkey, emailHmac, addedAt) => stmt.run(pubkey, emailHmac, addedAt).changes > 0;
+      return (pubkey, emailHmac, addedAt, role = 'user') =>
+        stmt.run(pubkey, emailHmac, addedAt, role === 'worker' ? 'worker' : 'user').changes > 0;
     })(),
-    keyCountForHmac: (emailHmac) =>
-      db.prepare('SELECT COUNT(*) c FROM registered_keys WHERE email_hmac = ?').get(emailHmac).c,
+    // Per-email key count, scoped by role: 'user' keys (browser, ≤4) and
+    // 'worker' keys (nodes, ≤25) have separate Sybil caps.
+    keyCountForHmac: (emailHmac, role = 'user') =>
+      db
+        .prepare('SELECT COUNT(*) c FROM registered_keys WHERE email_hmac = ? AND role = ?')
+        .get(emailHmac, role === 'worker' ? 'worker' : 'user').c,
     isRegisteredKey: (pubkey) =>
       !!db.prepare('SELECT 1 FROM registered_keys WHERE pubkey = ?').get(pubkey),
     registeredKeyCount: () => db.prepare('SELECT COUNT(*) c FROM registered_keys').get().c,

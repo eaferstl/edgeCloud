@@ -110,12 +110,12 @@ All shared IDs, payloads, commands, events, and statuses must also appear in `..
 
 | Path | Expected change | Notes |
 |---|---|---|
-| `agent_integration/mcp/package.json` | new | `@edgecloud/agent-mcp`; depends on `@edgecloud/shared` + an MCP SDK |
-| `agent_integration/mcp/src/server.js` | new | MCP server: tool registration + transport |
-| `agent_integration/mcp/src/client.js` | new | edgeCloud client (the `e2e-client.mjs` flow, factored for reuse) |
-| `agent_integration/mcp/src/keystore.js` | new | key custody + session cache |
-| `agent_integration/skill/` | new | thin Hermes skill manifest pointing at the MCP server |
-| `agent_integration/README.md` | new | attendee setup (submitter + worker enrollment) |
+| `agent_mcp_integration/mcp/package.json` | new | `@edgecloud/agent-mcp`; depends on `@edgecloud/shared` + an MCP SDK |
+| `agent_mcp_integration/mcp/src/server.js` | new | MCP server: tool registration + transport |
+| `agent_mcp_integration/mcp/src/client.js` | new | edgeCloud client (the `e2e-client.mjs` flow, factored for reuse) |
+| `agent_mcp_integration/mcp/src/keystore.js` | new | key custody + session cache |
+| `agent_mcp_integration/skill/` | new | thin Hermes skill manifest pointing at the MCP server |
+| `agent_mcp_integration/README.md` | new | attendee setup (submitter + worker enrollment) |
 
 ---
 
@@ -164,4 +164,4 @@ Integration check:
 | MCP transport: stdio vs HTTP+token (to match hosted/Telegram agents) | TODO | Which the target harnesses support best | Not Started |
 | Where the key custody process runs for hosted agents | TODO | Attendee-local vs experiment-hosted (trust boundary) | Not Started |
 | Should worker enrollment be in-scope for the demo or a follow-up | Coordination | Demo scope | Not Started |
-| Ratify `agent_integration/` as a module in `../00_master_prd.md` | Coordination / Keith | Add team row + acceptance | Not Started |
+| Ratify `agent_mcp_integration/` as a module in `../00_master_prd.md` | Coordination / Keith | Add team row + acceptance | Not Started |

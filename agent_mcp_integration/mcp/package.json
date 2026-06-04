@@ -1,0 +1,30 @@
+{
+  "name": "@edgecloud/agent-mcp",
+  "private": true,
+  "version": "0.1.0",
+  "description": "MCP server that lets Edge Esmeralda attendee agents submit pure-compute jobs to edgeCloud and read back results signed to their own key",
+  "type": "module",
+  "bin": {
+    "edgecloud-mcp": "src/index.js"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./client.js": "./src/client.js",
+    "./keystore.js": "./src/keystore.js"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "smoke": "node src/index.js --self-test",
+    "smoke:http": "node test/http-smoke.mjs",
+    "test:integration": "node test/integration.local.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@edgecloud/shared": "0.1.0",
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.23.8"
+  }
+}

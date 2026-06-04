@@ -58,7 +58,7 @@ services:
       # 10.0.2.2 (inside a QEMU VM). Also allow it through the egress firewall.
       # EDGECLOUD_LLM_URL: "http://10.0.2.2:9090"
       # EDGECLOUD_FIREWALL_ALLOW: "10.0.2.2/32"
-      # EDGECLOUD_LLM_MODEL: "lfm2.5-8b-a1b"
+      # EDGECLOUD_LLM_MODELS: "lfm2.5-8b-a1b,qwen3-coder-30b-a3b"   # comma-separated; first = default
       # Local-testing escape hatches (do NOT use in production):
       # EDGECLOUD_SKIP_FIREWALL: "1"
       # EDGECLOUD_FIREWALL_ALLOW: "192.168.1.50/32"

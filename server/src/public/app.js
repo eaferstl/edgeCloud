@@ -234,9 +234,16 @@ async function populateExamples() {
       sel.appendChild(o);
     });
   } catch (e) { /* wasm examples are optional */ }
-  sel.value = 'js:custom';
+  sel.value = 'inference:ask'; // default to the AI prompt — the crowd-pleaser
   onExampleChange();
 }
+
+// Pinned so the jobId (content-addressed) is deterministic AND model-aware:
+// everyone who submits the same prompt gets the same cached answer back fast.
+var INFERENCE_MODEL = 'lfm2.5-8b-a1b';
+var DEFAULT_PROMPT =
+  "You're running on a spare GPU that some Edge Esmeralda resident donated to the community. " +
+  'Say hi in one sentence, then tell me one genuinely surprising fact.';
 
 function selectedExample() {
   var v = $('exampleSelect').value.split(':');
@@ -250,7 +257,7 @@ function onExampleChange() {
     $('jsEditor').hidden = false;
     $('wasmInfo').hidden = true;
     if (lbl) lbl.textContent = 'Prompt — answered by an LLM on a GPU worker';
-    $('jsInput').value = 'In one sentence, what is a decentralized compute network?';
+    $('jsInput').value = DEFAULT_PROMPT;
   } else if (sel.kind === 'js') {
     var ex = JS_EXAMPLES.find(function (e) { return e.id === sel.id; });
     $('jsEditor').hidden = false;
@@ -327,7 +334,9 @@ $('submitBtn').addEventListener('click', async function () {
       if (!prompt) throw new Error('enter a prompt first');
       labelText = '🤖 ' + (prompt.length > 50 ? prompt.slice(0, 47) + '…' : prompt);
       // inference routes only to a GPU worker; give the model up to the max.
-      manifest = { v: 1, type: 'inference', entry: 'prompt.txt', args: [], timeoutMs: 60000, label: labelText };
+      // Pin the model so the content-addressed jobId is deterministic → identical
+      // prompts collapse to one cached answer.
+      manifest = { v: 1, type: 'inference', entry: 'prompt.txt', args: [], timeoutMs: 60000, label: labelText, model: INFERENCE_MODEL };
       entryBytes = utf8Bytes(prompt);
     } else if (sel.kind === 'js') {
       var src = prepareJsSource($('jsInput').value);

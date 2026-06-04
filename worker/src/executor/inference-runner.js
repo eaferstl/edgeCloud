@@ -15,7 +15,7 @@ export async function runInference(prompt, manifest, timeoutMs) {
   if (!config.llmUrl) {
     return { stdout: '', stderr: 'this worker has no GPU/LLM endpoint (EDGECLOUD_LLM_URL)', exitCode: -1, error: 'no_gpu', startedAt };
   }
-  const model = (manifest && manifest.model) || config.llmModel;
+  const model = (manifest && manifest.model) || config.llmModels[0];
   const headers = { 'content-type': 'application/json' };
   if (config.llmApiKey) headers.authorization = `Bearer ${config.llmApiKey}`;
   const body = JSON.stringify({

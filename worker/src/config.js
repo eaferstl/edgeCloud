@@ -28,7 +28,13 @@ export const config = {
   // type:"inference" jobs. The base URL is enough — "/v1/chat/completions" is
   // appended. Optional: a default model and an API bearer key.
   llmUrl: (process.env.EDGECLOUD_LLM_URL || '').trim().replace(/\/$/, ''),
-  llmModel: (process.env.EDGECLOUD_LLM_MODEL || 'lfm2.5-8b-a1b').trim(),
+  // Models this worker serves, advertised to the network (array). Comma-separated;
+  // the first is the default when a job doesn't pin one. EDGECLOUD_LLM_MODEL
+  // (singular) is accepted as a fallback.
+  llmModels: (process.env.EDGECLOUD_LLM_MODELS || process.env.EDGECLOUD_LLM_MODEL || 'lfm2.5-8b-a1b')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
   llmApiKey: (process.env.EDGECLOUD_LLM_API_KEY || process.env.LLAMA_API_KEY || '').trim(),
   // The unprivileged uid/gid that UNTRUSTED submitted code is dropped to. Set
   // in the Docker image; unset in local dev/tests (jobs then run in-process as

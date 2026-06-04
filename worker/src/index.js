@@ -71,7 +71,7 @@ async function main() {
   const ram = getRam();
   const capabilities = { cores: cpu.cores || 1, ramBytes: (ram && ram.totalBytes) || 0, gpu: !!config.llmUrl };
   if (config.llmUrl) {
-    console.log(`[boot] GPU/LLM inference ENABLED → ${config.llmUrl} (default model: ${config.llmModel})`);
+    console.log(`[boot] GPU/LLM inference ENABLED → ${config.llmUrl} (models: ${config.llmModels.join(', ')})`);
   }
 
   const coordinator = createCoordinator({
@@ -115,7 +115,7 @@ async function main() {
       const record = await buildDeviceRecord(workerKey.publicKey, coordinator.live);
       record.libp2pPeerId = peerId; // transport peerId → lets the server resolve our IP for the live map
       record.gpu = capabilities.gpu; // advertise GPU/inference capability
-      if (capabilities.gpu) record.model = config.llmModel;
+      if (capabilities.gpu) record.models = config.llmModels; // array of served model names
       await libp2p.services.pubsub.publish(TOPIC_HEARTBEAT, new TextEncoder().encode(JSON.stringify(record)));
     } catch {
       /* transient pubsub/metadata error; next tick retries */

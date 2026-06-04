@@ -80,8 +80,8 @@ Two env vars enable it (point the worker at the endpoint + let the firewall reac
 -e EDGECLOUD_LLM_URL=http://<HOST>:9090
 # allow the worker (root) to reach just that host — the sandbox uid stays fully blocked
 -e EDGECLOUD_FIREWALL_ALLOW=<HOST>/32
-# optional: default model + bearer key
--e EDGECLOUD_LLM_MODEL=lfm2.5-8b-a1b  -e EDGECLOUD_LLM_API_KEY=<key>
+# optional: comma-separated model names to advertise (first = default) + bearer key
+-e EDGECLOUD_LLM_MODELS=lfm2.5-8b-a1b,qwen3-coder-30b-a3b  -e EDGECLOUD_LLM_API_KEY=<key>
 ```
 
 What `<HOST>` is, by how the worker container reaches your machine:

@@ -86,7 +86,7 @@ $('registerForm').addEventListener('submit', async function (e) {
     if (!res.ok) throw new Error(body.error || ('registration failed (' + res.status + ')'));
     saveIdentity(identity);
     msg.className = 'msg ok';
-    msg.textContent = '✓ registered — your key lives in this browser';
+    msg.textContent = '✓ Registered — your key lives in this browser';
     renderIdentity();
   } catch (err) {
     msg.className = 'msg err';

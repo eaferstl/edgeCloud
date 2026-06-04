@@ -169,6 +169,24 @@ compromise of pinned dependencies, or a kernel/hypervisor 0-day (see §10).
 - **Assumption (load-bearing)**: submitted jobs are **pure/idempotent** (no external
   side effects), so a rare double-execution is harmless. edgeCloud does not sandbox
   *side effects*, only resources — see L7.
+- **Residual risk — worker-selection grinding / Sybil (R-010), REAL and practical.**
+  The winner is `min sha256(jobId‖peerId‖round)`; the claims DB is open-write and
+  `validateClaim` checks only shape (not that `claim.peerId` is a registered/attested
+  key the claimant controls), and peerIds are free to generate. So an attacker can
+  **grind candidate peerIds** and win: P(win) = M/(M+K) for M attacker candidates vs K
+  honest claimants, so **M≈10³–10⁴ → ~95–99.9% win against 5–50 workers, in seconds of
+  CPU** (hash-only — no key needed as implemented). Because results are **unsigned and
+  first-result-wins** (L4/R-003), a grinded winner can **silently forge the result** for
+  a targeted job; timeout-takeover does NOT help (it only fires when *no* result is
+  written). Nothing currently bounds it (no registration, stake, PoW, per-worker claim
+  cap, post-lock randomness, or result signature).
+  **Fix (ranked, composable; see `ROADMAP.md` §B):** (1) bind claims to a **registered,
+  non-rotatable worker identity** with a signature, **one claim per worker per round**
+  (turns "grind hash strings" into "create costly identities"); (2) **post-lock
+  randomness / VRF** so the winning value can't be pre-computed; (3) **reputation-weight**
+  selection so fresh disposable identities can't win; (4) **sign results + redundant
+  execution with disagreement detection** (Golem-style) so a malicious winner can't forge
+  undetected. (1)+(4) are the highest-value baseline.
 
 ### L7 — Worker sandbox: hostile submitted code (A2, A6)
 This is the most adversarial layer: **the job author is assumed fully malicious.**

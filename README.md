@@ -85,6 +85,7 @@ user-registrations — no redeploys. Trust chains transitively from the **genesi
 - **Code:** `shared/` (job/crypto/trust logic), `server/` (rendezvous + webform),
   `worker/` (Docker compute node)
 - **Tests:** `npm test`
+- **Security:** [`THREAT_MODEL.md`](THREAT_MODEL.md) (what it does/doesn't protect, load-bearing assumptions) · [`SECURITY_TESTING.md`](SECURITY_TESTING.md) (every security test we ran + results)
 - **Credits / collaborators:** [`CREDITS.md`](CREDITS.md)
 
 The earlier Kubo/go-ipfs container scaffold (`node-ipfs-container/`, `HANDOFF.md`) is

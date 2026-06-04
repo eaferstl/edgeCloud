@@ -45,6 +45,7 @@ Do not pre-fill completion. Team leads should update this during the build.
 | T-009 | Finalize demo script | Keith | Coordination | Building | Working path | TODO | path works; script `03_demo_script.md` still TODO |
 | T-010 | Capture fallback demo artifact | Keith | Coordination | Not Started | Working path | TODO |  |
 | T-011 | Complete full rehearsal | Keith + all teams | Coordination | Not Started | All teams | TODO |  |
+| T-012 | Ratify + build Agent Integration (attendee agents use edgeCloud) | TODO | Agent Integration | Not Started | Owner + scope decision | TODO | spec done (`agent_integration/spec.md`); see D-012 |
 
 ---
 
@@ -101,6 +102,18 @@ Do not pre-fill completion. Team leads should update this during the build.
 | COORD-005 | Maintain `02_integration_contracts.md` | Not Started |  |
 | COORD-006 | Maintain `03_demo_script.md` | Not Started |  |
 | COORD-007 | Maintain `04_decisions_risks_cuts.md` | Not Started |  |
+
+### Agent Integration
+
+| ID | Task | Status | Notes |
+|---|---|---|---|
+| AGENT-001 | Fill out `agent_integration/prd.md` | Demo Ready | done (proposal) |
+| AGENT-002 | Fill out `agent_integration/spec.md` | Demo Ready | done (proposal) |
+| AGENT-003 | Assign owner + ratify module into `00_master_prd.md` | Not Started | Coordination/Keith |
+| AGENT-004 | Build `@edgecloud/agent-mcp` MCP server (submitter tools) | Not Started | reuses `scripts/e2e-client.mjs` flow |
+| AGENT-005 | Thin Hermes skill wrapper (`hermes skills install edgecloud`) | Not Started |  |
+| AGENT-006 | Worker-enrollment helper + docs (≤25/email) | Not Started | reuses `worker/` Docker node |
+| AGENT-007 | Legal review of "your agent runs on the swarm" framing | Not Started | `legal/spec.md` |
 
 ### Legal
 

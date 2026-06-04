@@ -124,6 +124,7 @@ Owner: Job Queue.
 | 4 | Job Execution | Device Registry | capacity write-backs (`currentLoad` / `availableCapacity` / `status`) on accept / complete / fail (arch §10) | Yes | Not Started |
 | — | Coordination | All teams | per-node bootstrap wiring (libp2p + OrbitDB + modules), shared constants (arch §12–13) | Yes | Not Started |
 | — | Legal | Coordination | approved presentation language | Yes | Not Started |
+| — | Job Queue / Authentication / Job Execution | Agent Integration | HTTP API consumed unchanged: `/api/register`(-worker), `/api/jobs`, `/api/challenge`+`/api/auth/verify`, `/api/jobs/:id/{status,result}` (+ signed envelope contract) | Proposed | Proposed — new consumer only, no payload change; `agent_integration/spec.md`, D-012 |
 
 ---
 

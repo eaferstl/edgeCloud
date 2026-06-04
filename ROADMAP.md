@@ -112,6 +112,18 @@ OrbitDB-coordinated exactly-once-ish claim protocol, hardened Docker workers. Se
 
 ## F. Networking & exposure (the ELB / public-endpoint analog)
 
+- **Resilient worker presence (self-healing heartbeats).** ✅ **baseline shipped.**
+  Presence is a gossipsub heartbeat on `edgecloud/heartbeat/v1`, decoupled from correctness
+  (the claim set is the candidate set), so a worker can keep replicating + executing jobs
+  while *invisible* in the "workers online" pill. The cause was that the worker only
+  *published* (ephemeral gossipsub fan-out), so after the rendezvous/server restarted the
+  fan-out state went stale and heartbeats stopped arriving though OrbitDB was fine. Fix
+  (done): the worker now **subscribes** to the topic, making it a real mesh member;
+  gossipsub re-GRAFTs the mesh on its own heartbeat after a reconnect, so presence
+  self-heals without a manual container restart. **Remaining (future):** also derive
+  presence from live libp2p connections + a server-side liveness probe (belt-and-
+  suspenders), so the UI never under-reports a working fleet even if pubsub misbehaves —
+  this also feeds a future least-loaded scheduler (§D) that reads the same heartbeats.
 - **Expose a service on a stable URL/port** — reach a long-running job from the outside
   (via the relay or a gateway).
 - **Service discovery & addressing** — name → current worker(s); migrate transparently.

@@ -90,6 +90,15 @@ async function main() {
   // scheduling capacity so the server can show real device info and, later,
   // route to the least-loaded node. Still UI/scheduling-advisory only — the
   // claim protocol does not depend on it.
+  //
+  // SUBSCRIBE (not just publish) to the heartbeat topic so the worker is a real
+  // gossipsub MESH member, not an ephemeral fan-out publisher. A mesh self-heals
+  // (gossipsub re-GRAFTs on its own heartbeat after a peer reconnects), so the
+  // worker keeps showing up in "workers online" after the rendezvous/server
+  // restarts — fan-out state went stale there and the worker silently vanished
+  // from the UI while still working (ROADMAP.md §F / R-011). We don't need the
+  // inbound messages; subscribing is purely for reliable mesh membership.
+  libp2p.services.pubsub.subscribe(TOPIC_HEARTBEAT);
   const publishHeartbeat = async () => {
     try {
       const record = await buildDeviceRecord(workerKey.publicKey, coordinator.live);

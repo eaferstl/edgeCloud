@@ -36,6 +36,13 @@ export function openDb(dataDir) {
       result_json TEXT NOT NULL,
       cached_at   INTEGER NOT NULL
     );
+    -- Local tallies. NOT rebuildable from OrbitDB (every submission, including
+    -- duplicate/cached resubmissions, is counted — and the CRDT dedupes those),
+    -- so this is intentionally per-server, best-effort display state.
+    CREATE TABLE IF NOT EXISTS counters (
+      name  TEXT PRIMARY KEY,
+      value INTEGER NOT NULL DEFAULT 0
+    );
   `);
   // Migration for DBs created before the role column existed (it's a rebuildable
   // cache, but ALTER avoids a forced wipe). Defaults existing rows to 'user'.
@@ -98,6 +105,25 @@ export function makeQueries(db, sharedSalt) {
       !!db.prepare('SELECT 1 FROM job_submitters WHERE job_id = ? AND pubkey = ?').get(jobId, pubkey),
     jobSeen: (jobId) =>
       !!db.prepare('SELECT 1 FROM job_submitters WHERE job_id = ? LIMIT 1').get(jobId),
+    // Distinct jobs ever submitted (rebuilt from edgecloud-jobs) — used only to
+    // seed the submissions tally with a sensible baseline on first boot.
+    jobCount: () => db.prepare('SELECT COUNT(DISTINCT job_id) c FROM job_submitters').get().c,
+    // Total job SUBMISSIONS, counting every accepted POST including duplicate /
+    // cached resubmissions (the user-facing "score"). See the counters table note.
+    bumpSubmissions: () =>
+      db
+        .prepare(
+          "INSERT INTO counters(name, value) VALUES('submissions', 1) " +
+            'ON CONFLICT(name) DO UPDATE SET value = value + 1'
+        )
+        .run(),
+    submissionCount: () => {
+      const r = db.prepare("SELECT value v FROM counters WHERE name = 'submissions'").get();
+      return r ? r.v : 0;
+    },
+    // One-time baseline so the score doesn't start at 0 (no-op once it exists).
+    seedSubmissions: (n) =>
+      db.prepare("INSERT OR IGNORE INTO counters(name, value) VALUES('submissions', ?)").run(n),
 
     // --- result cache ---
     cacheResult: (() => {

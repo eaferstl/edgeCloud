@@ -116,6 +116,9 @@ export function createApp({ q, auth, databases, indexers, heartbeats, serverKey,
     if (!q.isRegisteredKey(env.pubkey)) {
       return res.status(403).json({ error: 'public key is not registered' });
     }
+    // Count every accepted submission (incl. duplicate/cached resubmissions) toward
+    // the public "jobs submitted" score, before any cache/dedup short-circuit.
+    q.bumpSubmissions();
     q.addJobSubmitter(env.jobId, env.pubkey, env.submittedAt ?? Date.now());
 
     // Duplicate submission == cache hit: answer immediately, execute nothing.
@@ -186,6 +189,7 @@ export function createApp({ q, auth, databases, indexers, heartbeats, serverKey,
       devices: heartbeats.devices(), // capability records (cpu/ram/storage/capacity)
       fleetAvailableCapacity: heartbeats.totalAvailableCapacity(),
       registeredKeys: q.registeredKeyCount(),
+      jobsSubmitted: q.submissionCount(),
       allowlistedEmails: q.allowlistCount(),
       cachedResults: q.cachedResultCount(),
       trustedServers: indexers.state.trustedServers.size,

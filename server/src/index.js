@@ -51,6 +51,9 @@ async function main() {
   const indexers = createIndexers({ databases, q });
   await indexers.fullRescan();
   indexers.follow();
+  // Seed the "jobs submitted" tally once with the distinct-job baseline so it
+  // doesn't start at 0; thereafter every submission increments it (incl. repeats).
+  q.seedSubmissions(q.jobCount());
 
   // Advertise our public multiaddrs to the network via a self-endorsement
   // (valid only if we are already trusted: genesis, or endorsed by a peer).

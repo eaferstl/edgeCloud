@@ -468,8 +468,11 @@ async function refreshStatus() {
     var cap = slots != null ? ' · ' + slots + ' job slot' + (slots === 1 ? '' : 's') + ' free' : '';
     // registeredKeys counts registered public keys; we surface each as a client.
     var clients = s.registeredKeys;
+    // total jobs ever submitted to the network — a running "score".
+    var jobs = s.jobsSubmitted;
     el.textContent = s.workersOnline + ' worker node' + (s.workersOnline === 1 ? '' : 's') + ' online' + cap +
-      ' · ' + clients + ' registered client' + (clients === 1 ? '' : 's');
+      ' · ' + clients + ' registered client' + (clients === 1 ? '' : 's') +
+      (jobs != null ? ' · ' + jobs + ' job' + (jobs === 1 ? '' : 's') + ' submitted' : '');
     // Hover/title shows each device's specs (CPU cores, free RAM/disk, capacity).
     if (s.devices && s.devices.length) {
       el.title = s.devices.map(function (d) {

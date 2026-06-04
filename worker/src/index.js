@@ -15,8 +15,9 @@ import { config } from './config.js';
 import { createWorkerLibp2p } from './libp2p-node.js';
 import { createRegistryVerifier } from './registry-verify.js';
 import { createCoordinator } from './coordination.js';
-import { buildDeviceRecord } from './device-info.js';
+import { buildDeviceRecord, getCpu, getRam } from './device-info.js';
 import { loadOrCreateWorkerKey } from './worker-key.js';
+import { createLatencyProbe } from './latency.js';
 import { registerWorker } from './register-worker.js';
 
 async function main() {
@@ -64,11 +65,28 @@ async function main() {
   await registerWorker({ httpFallback: config.httpFallback, email: config.email, pubkey: workerKey.publicKey });
   await registry.rebuild(); // pick up our own attestation if it has replicated
 
+  // What this worker can run: cores/RAM (container-scoped) + GPU if an LLM
+  // endpoint is configured. The election only lets a worker claim jobs it can
+  // satisfy (capability gate), so inference jobs route only to GPU workers.
+  const cpu = getCpu();
+  const ram = getRam();
+  const capabilities = { cores: cpu.cores || 1, ramBytes: (ram && ram.totalBytes) || 0, gpu: !!config.llmUrl };
+  if (config.llmUrl) {
+    console.log(`[boot] GPU/LLM inference ENABLED → ${config.llmUrl} (models: ${config.llmModels.join(', ')})`);
+  }
+
+  // Measure our latency to the rendezvous → proximity for the live map + the
+  // proximity-based election (claims carry our rtt so the closest capable worker wins).
+  const latency = createLatencyProbe({ url: `${config.httpFallback}/api/ping` });
+  latency.start();
+
   const coordinator = createCoordinator({
     databases,
     registry,
     workerKey: workerKey.publicKey,
     workerSecretKey: workerKey.secretKey,
+    capabilities,
+    getRtt: () => latency.rttMs(),
     maxConcurrent: config.maxConcurrent,
   });
   coordinator.follow();
@@ -103,6 +121,10 @@ async function main() {
     try {
       const record = await buildDeviceRecord(workerKey.publicKey, coordinator.live);
       record.libp2pPeerId = peerId; // transport peerId → lets the server resolve our IP for the live map
+      record.gpu = capabilities.gpu; // advertise GPU/inference capability
+      if (capabilities.gpu) record.models = config.llmModels; // array of served model names
+      const rtt = latency.rttMs();
+      if (typeof rtt === 'number') record.rttMs = rtt; // measured proximity to the rendezvous
       await libp2p.services.pubsub.publish(TOPIC_HEARTBEAT, new TextEncoder().encode(JSON.stringify(record)));
     } catch {
       /* transient pubsub/metadata error; next tick retries */

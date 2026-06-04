@@ -9,12 +9,22 @@ import { MAX_JOB_TIMEOUT_MS } from '@edgecloud/shared/constants.js';
 import { config } from '../config.js';
 import { runJs } from './js-runner.js';
 import { runWasm } from './wasm-runner.js';
+import { runInference } from './inference-runner.js';
 
 export async function executeJob(env) {
   const startedAt = Date.now();
   let scratch = null;
   try {
     const { manifest, entryName, entryBytes } = parseJobZipB64(env.zipB64);
+
+    // Inference jobs run no untrusted code — the worker just forwards the prompt
+    // to its GPU/LLM endpoint, so no scratch dir / sandbox uid is involved.
+    if (manifest.type === 'inference') {
+      const prompt = Buffer.from(entryBytes).toString('utf8');
+      const r = await runInference(prompt, manifest, Math.min(manifest.timeoutMs, MAX_JOB_TIMEOUT_MS));
+      return { ...r, startedAt: r.startedAt ?? startedAt };
+    }
+
     // Scratch dir on /tmp (a tmpfs under the hardened compose), the only place
     // both the root worker and the sandbox uid can use.
     scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'ecjob-'));

@@ -188,6 +188,10 @@ export function createApp({ q, auth, databases, indexers, heartbeats, serverKey,
     res.json(buildStatus());
   });
 
+  // Tiny endpoint workers time to measure their RTT to the rendezvous (proximity
+  // for the live map + the proximity-based election). Minimal work → mostly network.
+  app.get('/api/ping', (req, res) => res.status(204).end());
+
   // Live push channel (Server-Sent Events) for the execution map: emits a
   // `status` snapshot on connect + on fleet changes, and an `execution` event
   // the instant a result is cached. EventSource on the browser auto-reconnects.

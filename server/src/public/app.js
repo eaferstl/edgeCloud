@@ -219,6 +219,11 @@ async function populateExamples() {
     o.textContent = ex.label;
     sel.appendChild(o);
   });
+  // GPU/LLM inference — routes only to a worker that has a GPU endpoint.
+  var aiOpt = document.createElement('option');
+  aiOpt.value = 'inference:ask';
+  aiOpt.textContent = '🤖 Ask the AI (GPU / LLM)';
+  sel.appendChild(aiOpt);
   try {
     var res = await fetch('/api/modules');
     wasmModules = (await res.json()).modules || [];
@@ -229,9 +234,16 @@ async function populateExamples() {
       sel.appendChild(o);
     });
   } catch (e) { /* wasm examples are optional */ }
-  sel.value = 'js:custom';
+  sel.value = 'inference:ask'; // default to the AI prompt — the crowd-pleaser
   onExampleChange();
 }
+
+// Pinned so the jobId (content-addressed) is deterministic AND model-aware:
+// everyone who submits the same prompt gets the same cached answer back fast.
+var INFERENCE_MODEL = 'lfm2.5-8b-a1b';
+var DEFAULT_PROMPT =
+  "You're running on a spare GPU that some Edge Esmeralda resident donated to the community. " +
+  'Say hi in one sentence, then tell me one genuinely surprising fact.';
 
 function selectedExample() {
   var v = $('exampleSelect').value.split(':');
@@ -240,10 +252,17 @@ function selectedExample() {
 
 function onExampleChange() {
   var sel = selectedExample();
-  if (sel.kind === 'js') {
+  var lbl = document.querySelector('label[for="jsInput"]');
+  if (sel.kind === 'inference') {
+    $('jsEditor').hidden = false;
+    $('wasmInfo').hidden = true;
+    if (lbl) lbl.textContent = 'Prompt — answered by an LLM on a GPU worker';
+    $('jsInput').value = DEFAULT_PROMPT;
+  } else if (sel.kind === 'js') {
     var ex = JS_EXAMPLES.find(function (e) { return e.id === sel.id; });
     $('jsEditor').hidden = false;
     $('wasmInfo').hidden = true;
+    if (lbl) lbl.innerHTML = 'JavaScript (a bare expression gets wrapped in <code>console.log(…)</code>)';
     $('jsInput').value = ex ? ex.code : '';
   } else {
     var m = wasmModules.find(function (x) { return x.name === sel.id; });
@@ -310,7 +329,16 @@ $('submitBtn').addEventListener('click', async function () {
   try {
     var sel = selectedExample();
     var manifest, entryBytes, labelText;
-    if (sel.kind === 'js') {
+    if (sel.kind === 'inference') {
+      var prompt = $('jsInput').value.trim();
+      if (!prompt) throw new Error('enter a prompt first');
+      labelText = '🤖 ' + (prompt.length > 50 ? prompt.slice(0, 47) + '…' : prompt);
+      // inference routes only to a GPU worker; give the model up to the max.
+      // Pin the model so the content-addressed jobId is deterministic → identical
+      // prompts collapse to one cached answer.
+      manifest = { v: 1, type: 'inference', entry: 'prompt.txt', args: [], timeoutMs: 60000, label: labelText, model: INFERENCE_MODEL };
+      entryBytes = utf8Bytes(prompt);
+    } else if (sel.kind === 'js') {
       var src = prepareJsSource($('jsInput').value);
       labelText = src.length > 60 ? src.slice(0, 57) + '…' : src;
       manifest = { v: 1, type: 'js', entry: 'main.js', args: [], timeoutMs: DEFAULT_JOB_TIMEOUT_MS, label: labelText };
@@ -626,15 +654,19 @@ function renderViz(s) {
       n._nm = svgEl('text', { class: 'nm', 'text-anchor': 'middle', y: -36 });
       n._ip = svgEl('text', { class: 'ip', 'text-anchor': 'middle', y: 41 });
       n._px = svgEl('text', { class: 'px', 'text-anchor': 'middle', y: 58 });
-      n.appendChild(n._nm); n.appendChild(n._ip); n.appendChild(n._px);
+      n._gpu = svgEl('text', { class: 'gpu-badge', 'text-anchor': 'middle', y: 74 });
+      n.appendChild(n._nm); n.appendChild(n._ip); n.appendChild(n._px); n.appendChild(n._gpu);
       VIZ.layers.nodes.appendChild(n); VIZ.nodeEls[id] = n;
     }
     n.setAttribute('transform', 'translate(' + p.x + ',' + p.y + ')');
-    n.setAttribute('class', 'viz-node ' + statusCls + (n.classList.contains('pulsing') ? ' pulsing' : ''));
+    n.setAttribute('class', 'viz-node ' + statusCls + (d.gpu ? ' gpu' : '') + (n.classList.contains('pulsing') ? ' pulsing' : ''));
     n._nm.textContent = (d.peerId || '').slice(0, 8);
     n._ip.textContent = d.ip || '—';
-    n._px.textContent = (typeof d.rttMs === 'number') ? ('~' + Math.round(d.rttMs) + ' ms')
-      : (d.link === 'direct' ? 'direct · 1 hop' : d.link === 'relay' ? 'via relay · 2 hops' : '—');
+    var hops = d.link === 'direct' ? '1 hop' : d.link === 'relay' ? '2 hops' : null;
+    n._px.textContent = (typeof d.rttMs === 'number')
+      ? ('~' + Math.round(d.rttMs) + ' ms' + (hops ? ' · ' + hops : ''))
+      : (hops || '—');
+    n._gpu.textContent = d.gpu ? ('⚡ GPU' + (d.models && d.models[0] ? ' · ' + d.models[0] : '')) : '';
   });
 
   // remove departed workers

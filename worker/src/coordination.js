@@ -21,7 +21,9 @@
 // production defaults to OrbitDB + wall clock + the real executor.
 
 import { verifyEnvelope } from '@edgecloud/shared/envelope.js';
-import { buildClaim, validateClaim, claimWinner } from '@edgecloud/shared/claims.js';
+import { buildClaim, validateClaim } from '@edgecloud/shared/claims.js';
+import { electWinner } from '@edgecloud/shared/election.js';
+import { meetsRequirements } from '@edgecloud/shared/capability.js';
 import { buildResult, verifyResult } from '@edgecloud/shared/result.js';
 import { allEventValues, getResultDoc } from '@edgecloud/shared/orbit.js';
 import { parseJobZipB64 } from '@edgecloud/shared/zip.js';
@@ -50,6 +52,8 @@ export function createCoordinator({
   registry,
   workerKey, // base64 Ed25519 public key — this worker's registered identity
   workerSecretKey, // base64 secret key for signing claims + results
+  capabilities = { cores: 1, ramBytes: 0, gpu: false }, // what this worker can run
+  getRtt = () => null, // this worker's measured latency to the rendezvous (ms), or null
   maxConcurrent = 4,
   log = console.log,
   // --- injectable seam (defaults = production) ---
@@ -129,16 +133,34 @@ export function createCoordinator({
         log(`[job ${short}] rejected: ${e.message}`);
         return;
       }
+      // 4. capability gate — only claim jobs this worker can actually run, so
+      // incapable workers self-exclude from the election (e.g. inference jobs go
+      // only to GPU workers; minCores/minRAM are respected). Decentralized: no
+      // scheduler decides, each worker just doesn't claim what it can't do.
+      if (!meetsRequirements(manifest, capabilities)) {
+        log(`[job ${short}] not claiming — lacks capability for ${manifest.type}${manifest.minCores ? ` (needs ${manifest.minCores} cores)` : ''}`);
+        return;
+      }
       const jobTimeout = Math.min(manifest.timeoutMs, MAX_JOB_TIMEOUT_MS);
 
-      // 4. claim rounds
+      // 5. claim rounds
       for (let round = 0; round < t.maxClaimRounds; round++) {
-        await store.addClaim(buildClaim(jid, workerKey, round, workerSecretKey));
+        const claim = buildClaim(jid, workerKey, round, workerSecretKey);
+        const myRtt = getRtt();
+        if (typeof myRtt === 'number') claim.rtt = myRtt; // advisory (unsigned): our proximity to the rendezvous
+        await store.addClaim(claim);
         await clock.sleep(t.claimSettleMs);
         if (await validResult(jid)) return;
 
         const claims = acceptedClaims(await store.readClaims());
-        const winner = claimWinner(jid, round, claims);
+        // Pluggable election (proximity + capability; capability already filtered
+        // at claim time). Each claimant's rtt comes from its own claim, so all
+        // workers see the same data and agree on the winner.
+        const rttByKey = new Map();
+        for (const c of claims) {
+          if (c.jobId === jid && c.round === round && typeof c.rtt === 'number') rttByKey.set(c.workerKey, c.rtt);
+        }
+        const winner = electWinner(jid, round, claims, { rttOf: (k) => (rttByKey.has(k) ? rttByKey.get(k) : null) });
         if (winner === workerKey) {
           log(`[job ${short}] won claim round ${round} — executing (${manifest.type}: ${manifest.label || 'unlabeled'})`);
           await executeAndPublish(env, jid, short);

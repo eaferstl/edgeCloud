@@ -21,6 +21,21 @@ export const config = {
   // allowlisted key (≤4 keys/email), which is what bounds the Sybil/grinding
   // attack on claim selection (THREAT_MODEL.md R-010). Required.
   email: (process.env.EDGECLOUD_EMAIL || '').trim().toLowerCase(),
+  // GPU / LLM inference. Set EDGECLOUD_LLM_URL to an OpenAI-compatible endpoint
+  // the worker can curl (e.g. a host llama-swap/Ollama/llama-server reachable at
+  // http://host.docker.internal:9090 or http://172.17.0.1:9090). When set, this
+  // worker advertises GPU capability and is the only kind that can win
+  // type:"inference" jobs. The base URL is enough — "/v1/chat/completions" is
+  // appended. Optional: a default model and an API bearer key.
+  llmUrl: (process.env.EDGECLOUD_LLM_URL || '').trim().replace(/\/$/, ''),
+  // Models this worker serves, advertised to the network (array). Comma-separated;
+  // the first is the default when a job doesn't pin one. EDGECLOUD_LLM_MODEL
+  // (singular) is accepted as a fallback.
+  llmModels: (process.env.EDGECLOUD_LLM_MODELS || process.env.EDGECLOUD_LLM_MODEL || 'lfm2.5-8b-a1b')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
+  llmApiKey: (process.env.EDGECLOUD_LLM_API_KEY || process.env.LLAMA_API_KEY || '').trim(),
   // The unprivileged uid/gid that UNTRUSTED submitted code is dropped to. Set
   // in the Docker image; unset in local dev/tests (jobs then run in-process as
   // the current user — fine for trusted local runs, NOT for production).

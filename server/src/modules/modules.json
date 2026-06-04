@@ -8,5 +8,10 @@
     "name": "primes.wasm",
     "label": "Primes below 1000 (sieve, hand-written WebAssembly)",
     "args": []
+  },
+  {
+    "name": "mandelbrot.wasm",
+    "label": "🖼️ Render the Mandelbrot set (hand-written WebAssembly)",
+    "args": []
   }
 ]

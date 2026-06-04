@@ -24,6 +24,9 @@ export async function runInference(prompt, manifest, timeoutMs) {
     temperature: 0.2,
     max_tokens: 2048,
     stream: false,
+    // Skip the reasoning pass on Qwen3 / LFM "thinking" models (mirrors `llm
+    // --fast`) → clean, fast answers; ignored by non-thinking models.
+    chat_template_kwargs: { enable_thinking: false },
   });
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), Math.max(1000, timeoutMs));

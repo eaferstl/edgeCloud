@@ -89,6 +89,7 @@ user-registrations — no redeploys. Trust chains transitively from the **genesi
   `worker/` (Docker compute node)
 - **Tests:** `npm test`
 - **Security:** [`THREAT_MODEL.md`](THREAT_MODEL.md) (what it does/doesn't protect, load-bearing assumptions) · [`SECURITY_TESTING.md`](SECURITY_TESTING.md) (every security test we ran + results)
+- **Roadmap / vision (decentralized AWS):** [`ROADMAP.md`](ROADMAP.md)
 - **Credits / collaborators:** [`CREDITS.md`](CREDITS.md)
 
 The earlier Kubo/go-ipfs container scaffold (`node-ipfs-container/`, `HANDOFF.md`) is

@@ -83,11 +83,16 @@ test('attestation verifies only from trusted servers', () => {
 
 test('claim winner is deterministic and order-independent', () => {
   const jobId = 'ab'.repeat(32);
-  const claims = [buildClaim(jobId, 'peerA', 0), buildClaim(jobId, 'peerB', 0), buildClaim(jobId, 'peerC', 0)];
+  // worker identity = base64 public key; claims are signed with the matching key
+  const a = generateKeypair();
+  const b = generateKeypair();
+  const c = generateKeypair();
+  const keys = [a, b, c].map((k) => k.publicKey);
+  const claims = [a, b, c].map((k) => buildClaim(jobId, k.publicKey, 0, k.secretKey));
   const w1 = claimWinner(jobId, 0, claims);
   const w2 = claimWinner(jobId, 0, [...claims].reverse());
   assert.equal(w1, w2);
-  assert.ok(['peerA', 'peerB', 'peerC'].includes(w1));
+  assert.ok(keys.includes(w1));
   // different round -> potentially different winner, but never claims from other rounds
   assert.equal(claimWinner(jobId, 1, claims), null);
 });

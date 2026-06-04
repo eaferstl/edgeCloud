@@ -8,6 +8,11 @@
 //   - per-worker fake executors that record execution ATTEMPTS and can "die"
 //     (never finish), to exercise winner death + takeover.
 //
+// Worker identity is now a real Ed25519 keypair (its base64 public key); claims
+// and results are SIGNED with it and the coordinator only counts claims whose
+// key is "registered" (here: a stub registry that approves everyone). So the
+// sim threads keypairs through and ranks on the public key.
+//
 // Invariants asserted (see THREAT_MODEL.md §L6):
 //   safety       — no partition  => exactly ONE execution; partition => bounded
 //                  (<= #partitions), never an explosion.
@@ -25,6 +30,7 @@ import { buildJobZipB64 } from '@edgecloud/shared/zip.js';
 import { createEnvelope } from '@edgecloud/shared/envelope.js';
 import { generateKeypair } from '@edgecloud/shared/crypto.js';
 import { claimRank } from '@edgecloud/shared/claims.js';
+import { buildResult } from '@edgecloud/shared/result.js';
 
 // ---- virtual clock -------------------------------------------------------
 function makeVirtualClock() {
@@ -64,6 +70,14 @@ async function drive(clock, { maxSteps = 5000 } = {}) {
   await microflush();
 }
 
+// ---- identities ----------------------------------------------------------
+// A worker's identity IS its base64 Ed25519 public key. We keep keypairs stable
+// for a given test so the deterministic winner is reproducible.
+function makeIdentities(n) {
+  return Array.from({ length: n }, () => generateKeypair());
+}
+const idOf = (kp) => kp.publicKey;
+
 // ---- partition-aware in-memory store -------------------------------------
 function makeSimNetwork(clock, { partitionOf = () => 0, healAt = Infinity } = {}) {
   const claims = []; // { claim, group, t }
@@ -71,8 +85,8 @@ function makeSimNetwork(clock, { partitionOf = () => 0, healAt = Infinity } = {}
   const visible = (entryGroup, observerGroup) =>
     entryGroup === observerGroup || clock.now() >= healAt;
 
-  function storeFor(peerId) {
-    const group = partitionOf(peerId);
+  function storeFor(workerKey) {
+    const group = partitionOf(workerKey);
     return {
       addClaim: (claim) => {
         claims.push({ claim, group, t: clock.now() });
@@ -81,8 +95,10 @@ function makeSimNetwork(clock, { partitionOf = () => 0, healAt = Infinity } = {}
       readClaims: () =>
         Promise.resolve(claims.filter((e) => visible(e.group, group)).map((e) => e.claim)),
       getResult: (jobId) => {
+        // results is a documents DB keyed by jobId (last write wins), so return
+        // the most-recent visible entry — not the first — for this jobId.
         const vis = results.filter((e) => e.jobId === jobId && visible(e.group, group));
-        return Promise.resolve(vis.length ? vis[0].result : null);
+        return Promise.resolve(vis.length ? vis[vis.length - 1].result : null);
       },
       putResult: (jobId, result) => {
         results.push({ jobId, result, group, t: clock.now() });
@@ -93,18 +109,20 @@ function makeSimNetwork(clock, { partitionOf = () => 0, healAt = Infinity } = {}
   return { storeFor, claims, results };
 }
 
-// per-worker executor: records the attempt, then either returns a result or
-// (for a "dead" peer) never resolves — modeling a worker that started the job
-// then crashed mid-execution.
-function executorFor(peerId, attempts, deadPeers, clock) {
+// per-worker executor: records the attempt (by public key), then either returns
+// a result or (for a "dead" key) never resolves — modeling a worker that started
+// the job then crashed mid-execution.
+function executorFor(workerKey, attempts, deadKeys, clock) {
   return () => {
-    attempts.push(peerId);
-    if (deadPeers.has(peerId)) return new Promise(() => {}); // never resolves
+    attempts.push(workerKey);
+    if (deadKeys.has(workerKey)) return new Promise(() => {}); // never resolves
     return Promise.resolve({ stdout: 'ok', stderr: '', exitCode: 0, error: null, startedAt: clock.now() });
   };
 }
 
-const ALWAYS_REGISTERED = { checkWithGrace: async () => true };
+// Stub registry: signatures are still checked by the coordinator; here every
+// (validly-signed) key counts as registered.
+const ALWAYS_REGISTERED = { checkWithGrace: async () => true, isVerified: () => true };
 const SIM_TIMINGS = { claimSettleMs: 100, resultMarginMs: 200, maxClaimRounds: 6, pollMs: 50 };
 
 // Build one real, valid, signed envelope (so verifyEnvelope + parseJobZipB64
@@ -116,23 +134,24 @@ function makeEnvelope() {
   return createEnvelope({ zipB64, publicKeyB64: kp.publicKey, secretKeyB64: kp.secretKey });
 }
 
-function makeWorkers(peerIds, { net, clock, attempts, deadPeers = new Set(), registry = ALWAYS_REGISTERED }) {
-  return peerIds.map((peerId) =>
+function makeWorkers(keypairs, { net, clock, attempts, deadKeys = new Set(), registry = ALWAYS_REGISTERED }) {
+  return keypairs.map((kp) =>
     createCoordinator({
-      peerId,
+      workerKey: kp.publicKey,
+      workerSecretKey: kp.secretKey,
       registry,
       log: () => {},
-      store: net.storeFor(peerId),
+      store: net.storeFor(kp.publicKey),
       clock,
-      executeJob: executorFor(peerId, attempts, deadPeers, clock),
+      executeJob: executorFor(kp.publicKey, attempts, deadKeys, clock),
       timings: SIM_TIMINGS,
     })
   );
 }
 
-// expected deterministic winner among a peer set for a (jobId, round)
-function expectedWinner(jobId, peerIds, round = 0) {
-  return [...peerIds].sort((a, b) => (claimRank(jobId, a, round) < claimRank(jobId, b, round) ? -1 : 1))[0];
+// expected deterministic winner (a public key) among a key set for (jobId, round)
+function expectedWinner(jobId, keys, round = 0) {
+  return [...keys].sort((a, b) => (claimRank(jobId, a, round) < claimRank(jobId, b, round) ? -1 : 1))[0];
 }
 
 // ==========================================================================
@@ -141,7 +160,8 @@ test('sim: no partition → exactly one execution, deterministic winner', async 
   const clock = makeVirtualClock();
   const net = makeSimNetwork(clock);
   const attempts = [];
-  const peers = ['peerA', 'peerB', 'peerC', 'peerD'];
+  const peers = makeIdentities(4);
+  const keys = peers.map(idOf);
   const env = makeEnvelope();
   const workers = makeWorkers(peers, { net, clock, attempts });
 
@@ -149,27 +169,28 @@ test('sim: no partition → exactly one execution, deterministic winner', async 
   await drive(clock);
 
   assert.equal(attempts.length, 1, `exactly one execution, got ${attempts.length}`);
-  assert.equal(attempts[0], expectedWinner(env.jobId, peers), 'the deterministic tiebreak winner executed');
+  assert.equal(attempts[0], expectedWinner(env.jobId, keys), 'the deterministic tiebreak winner executed');
   assert.equal(net.results.filter((r) => r.jobId === env.jobId).length, 1, 'exactly one result');
 });
 
 test('sim: winner is run-to-run deterministic', async () => {
-  const peers = ['n1', 'n2', 'n3', 'n4', 'n5'];
+  const peers = makeIdentities(5); // stable identities across all runs
+  const keys = peers.map(idOf);
   const env = makeEnvelope();
   const winners = new Set();
   for (let i = 0; i < 5; i++) {
     const clock = makeVirtualClock();
     const net = makeSimNetwork(clock);
     const attempts = [];
-    // shuffle worker start order each run — must not change the winner
-    const order = [...peers].sort(() => (claimRank(env.jobId, 'x' + i, i) < claimRank(env.jobId, 'y', 0) ? 1 : -1));
+    // rotate worker start order each run — must not change the winner
+    const order = peers.map((_, j) => peers[(j + i) % peers.length]);
     makeWorkers(order, { net, clock, attempts }).forEach((w) => w.handleJob(env));
     await drive(clock);
     assert.equal(attempts.length, 1);
     winners.add(attempts[0]);
   }
   assert.equal(winners.size, 1, 'same winner every run');
-  assert.equal([...winners][0], expectedWinner(env.jobId, peers));
+  assert.equal([...winners][0], expectedWinner(env.jobId, keys));
 });
 
 test('sim: cached result already present → nobody executes (dedup)', async () => {
@@ -177,32 +198,61 @@ test('sim: cached result already present → nobody executes (dedup)', async () 
   const net = makeSimNetwork(clock);
   const attempts = [];
   const env = makeEnvelope();
-  // seed a result before any worker starts
-  net.results.push({ jobId: env.jobId, result: { v: 1, jobId: env.jobId, ok: true }, group: 0, t: 0 });
+  // seed a VALID, SIGNED result before any worker starts (an unsigned one would
+  // be ignored as a forgery and the workers would execute)
+  const seedKp = generateKeypair();
+  const seeded = buildResult({
+    jobId: env.jobId, stdout: 'cached', stderr: '', exitCode: 0,
+    executedBy: seedKp.publicKey, startedAt: 0, secretKeyB64: seedKp.secretKey,
+  });
+  net.results.push({ jobId: env.jobId, result: seeded, group: 0, t: 0 });
 
-  makeWorkers(['a', 'b', 'c'], { net, clock, attempts }).forEach((w) => w.handleJob(env));
+  makeWorkers(makeIdentities(3), { net, clock, attempts }).forEach((w) => w.handleJob(env));
   await drive(clock);
 
   assert.equal(attempts.length, 0, 'no execution when a result already exists');
+});
+
+test('sim: forged (unsigned) result is ignored → workers still execute', async () => {
+  const clock = makeVirtualClock();
+  const net = makeSimNetwork(clock);
+  const attempts = [];
+  const env = makeEnvelope();
+  // a third party drops a shape-valid but UNSIGNED result for the job
+  net.results.push({
+    jobId: env.jobId,
+    result: { v: 1, jobId: env.jobId, stdout: 'forged', stderr: '', executedBy: 'attacker' },
+    group: 0,
+    t: 0,
+  });
+
+  makeWorkers(makeIdentities(3), { net, clock, attempts }).forEach((w) => w.handleJob(env));
+  await drive(clock);
+
+  assert.equal(attempts.length, 1, 'a forged result does not suppress honest execution');
+  // and the published result IS validly signed
+  const real = net.results.filter((r) => r.jobId === env.jobId && r.result.sig);
+  assert.ok(real.length >= 1, 'an honest, signed result was produced');
 });
 
 test('sim: dead round-0 winner → a later round takes over (liveness)', async () => {
   const clock = makeVirtualClock();
   const net = makeSimNetwork(clock);
   const attempts = [];
-  const peers = ['p1', 'p2', 'p3', 'p4'];
+  const peers = makeIdentities(4);
+  const keys = peers.map(idOf);
   const env = makeEnvelope();
-  const winner0 = expectedWinner(env.jobId, peers, 0);
-  const deadPeers = new Set([winner0]); // the round-0 winner crashes mid-execution
+  const winner0 = expectedWinner(env.jobId, keys, 0);
+  const deadKeys = new Set([winner0]); // the round-0 winner crashes mid-execution
 
-  makeWorkers(peers, { net, clock, attempts, deadPeers }).forEach((w) => w.handleJob(env));
+  makeWorkers(peers, { net, clock, attempts, deadKeys }).forEach((w) => w.handleJob(env));
   await drive(clock);
 
   // the dead winner attempted (then hung); a DIFFERENT, live peer published a result
   assert.ok(attempts.includes(winner0), 'round-0 winner attempted before dying');
   const published = net.results.filter((r) => r.jobId === env.jobId);
   assert.ok(published.length >= 1, 'liveness: a result was produced despite the dead winner');
-  const publisher = attempts.find((p) => !deadPeers.has(p));
+  const publisher = attempts.find((p) => !deadKeys.has(p));
   assert.ok(publisher, 'a live peer took over and executed');
   // bounded: the dead attempt + the takeover, not an explosion
   assert.ok(attempts.length <= peers.length, `bounded executions (${attempts.length} <= ${peers.length})`);
@@ -210,11 +260,12 @@ test('sim: dead round-0 winner → a later round takes over (liveness)', async (
 
 test('sim: network partition → bounded duplicate execution, converges after heal', async () => {
   const clock = makeVirtualClock();
+  const peers = makeIdentities(4);
+  const [a1, a2, b1, b2] = peers.map(idOf);
   // two partitions that can't see each other until t=10_000; each has 2 workers
-  const groups = { gA1: 0, gA2: 0, gB1: 1, gB2: 1 };
-  const net = makeSimNetwork(clock, { partitionOf: (p) => groups[p], healAt: 10000 });
+  const group = new Map([[a1, 0], [a2, 0], [b1, 1], [b2, 1]]);
+  const net = makeSimNetwork(clock, { partitionOf: (k) => group.get(k), healAt: 10000 });
   const attempts = [];
-  const peers = Object.keys(groups);
   const env = makeEnvelope();
 
   makeWorkers(peers, { net, clock, attempts }).forEach((w) => w.handleJob(env));
@@ -223,9 +274,8 @@ test('sim: network partition → bounded duplicate execution, converges after he
   // SAFETY: each partition elects ONE winner → at most #partitions executions,
   // never unbounded. (This is the CAP trade-off, made harmless by jobId dedupe.)
   assert.ok(attempts.length >= 1 && attempts.length <= 2, `bounded by partitions, got ${attempts.length}`);
-  // each partition that executed used its own deterministic winner
-  const groupAcand = ['gA1', 'gA2'];
-  const groupBcand = ['gB1', 'gB2'];
+  const groupAcand = [a1, a2];
+  const groupBcand = [b1, b2];
   const inA = attempts.filter((p) => groupAcand.includes(p));
   const inB = attempts.filter((p) => groupBcand.includes(p));
   assert.ok(inA.length <= 1 && inB.length <= 1, 'at most one execution per partition');
@@ -238,14 +288,15 @@ test('sim: network partition → bounded duplicate execution, converges after he
 
 test('sim: partition where one side is dead → other side still serves it post-heal', async () => {
   const clock = makeVirtualClock();
-  const groups = { live1: 0, live2: 0, deadOnly: 1 };
-  const net = makeSimNetwork(clock, { partitionOf: (p) => groups[p], healAt: 8000 });
+  const [live1, live2, deadOnly] = makeIdentities(3);
+  const group = new Map([[idOf(live1), 0], [idOf(live2), 0], [idOf(deadOnly), 1]]);
+  const net = makeSimNetwork(clock, { partitionOf: (k) => group.get(k), healAt: 8000 });
   const attempts = [];
   const env = makeEnvelope();
   // partition B has a single worker that dies; partition A is healthy
-  const deadPeers = new Set(['deadOnly']);
+  const deadKeys = new Set([idOf(deadOnly)]);
 
-  makeWorkers(Object.keys(groups), { net, clock, attempts, deadPeers }).forEach((w) => w.handleJob(env));
+  makeWorkers([live1, live2, deadOnly], { net, clock, attempts, deadKeys }).forEach((w) => w.handleJob(env));
   await drive(clock);
 
   const published = net.results.filter((r) => r.jobId === env.jobId);

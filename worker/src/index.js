@@ -16,14 +16,33 @@ import { createWorkerLibp2p } from './libp2p-node.js';
 import { createRegistryVerifier } from './registry-verify.js';
 import { createCoordinator } from './coordination.js';
 import { buildDeviceRecord } from './device-info.js';
+import { loadOrCreateWorkerKey } from './worker-key.js';
+import { registerWorker } from './register-worker.js';
 
 async function main() {
+  // A worker MUST identify itself with an allowlisted Edge Esmeralda email so it
+  // can register its identity key (≤4 keys/email). This is what makes worker
+  // identity accountable rather than anonymous — fail fast if it's missing.
+  if (!config.email || !config.email.includes('@')) {
+    console.error(
+      '[boot] EDGECLOUD_EMAIL is required — set it to your Edge Esmeralda attendee email\n' +
+        '       so this worker can register its identity key (≤4 keys/email).'
+    );
+    process.exit(1);
+  }
+
   console.log(`[boot] edgeCloud worker starting (data: ${config.dataDir})`);
   console.log(`[boot] rendezvous: ${config.rendezvous.join(', ')}`);
 
+  // App-layer identity: the worker's stable, non-rotatable Ed25519 key. Its
+  // base64 public key IS the worker's network identity; claims and results are
+  // signed with it. (The libp2p peerId below is just the transport address.)
+  const workerKey = loadOrCreateWorkerKey(config.dataDir);
+  console.log(`[boot] worker identity (pubkey): ${workerKey.publicKey}`);
+
   const libp2p = await createWorkerLibp2p(config.dataDir, config.rendezvous);
   const peerId = libp2p.peerId.toString();
-  console.log(`[boot] peerId: ${peerId}`);
+  console.log(`[boot] peerId (transport): ${peerId}`);
 
   const blockstore = new LevelBlockstore(path.join(config.dataDir, 'blocks'));
   // NOTE: default Helia block-brokers/routers. Overriding to drop the public-gateway
@@ -40,7 +59,18 @@ async function main() {
   await registry.rebuild();
   registry.follow();
 
-  const coordinator = createCoordinator({ databases, registry, peerId, maxConcurrent: config.maxConcurrent });
+  // Register this worker's identity key against the operator's allowlisted email
+  // (idempotent). A definitive rejection (not allowlisted / quota) is fatal.
+  await registerWorker({ httpFallback: config.httpFallback, email: config.email, pubkey: workerKey.publicKey });
+  await registry.rebuild(); // pick up our own attestation if it has replicated
+
+  const coordinator = createCoordinator({
+    databases,
+    registry,
+    workerKey: workerKey.publicKey,
+    workerSecretKey: workerKey.secretKey,
+    maxConcurrent: config.maxConcurrent,
+  });
   coordinator.follow();
   // give initial head-sync a moment, then work through any backlog
   setTimeout(() => coordinator.scanBacklog().catch(() => {}), 8000);
@@ -62,7 +92,7 @@ async function main() {
   // claim protocol does not depend on it.
   const publishHeartbeat = async () => {
     try {
-      const record = await buildDeviceRecord(peerId, coordinator.live);
+      const record = await buildDeviceRecord(workerKey.publicKey, coordinator.live);
       await libp2p.services.pubsub.publish(TOPIC_HEARTBEAT, new TextEncoder().encode(JSON.stringify(record)));
     } catch {
       /* transient pubsub/metadata error; next tick retries */

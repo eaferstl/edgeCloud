@@ -44,6 +44,16 @@ export function createRegistryVerifier({ databases, httpFallback, log = console.
   }
 
   /**
+   * Synchronous "is this key registered right now?" — no waiting. Used to
+   * filter claims (an unregistered claimant is ignored; a legit worker whose
+   * registration hasn't replicated yet is simply skipped this round and picked
+   * up once it syncs). For job submitters use checkWithGrace instead.
+   */
+  function isVerified(pubkey) {
+    return verifiedKeys.has(pubkey);
+  }
+
+  /**
    * Is this pubkey registered? Waits for replication before answering "no".
    */
   async function checkWithGrace(pubkey) {
@@ -75,5 +85,5 @@ export function createRegistryVerifier({ databases, httpFallback, log = console.
     return verifiedKeys.has(pubkey);
   }
 
-  return { rebuild, follow, checkWithGrace, trustedServers: () => trustedServers };
+  return { rebuild, follow, checkWithGrace, isVerified, trustedServers: () => trustedServers };
 }

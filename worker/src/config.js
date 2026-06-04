@@ -16,6 +16,11 @@ export const config = {
   // chaodoze's EDGECLOUD_MAX_CONCURRENT). The claim protocol does not yet gate
   // on this — it's advertised for display and future least-loaded routing.
   maxConcurrent: Number(process.env.EDGECLOUD_MAX_CONCURRENT) || 4,
+  // The Edge Esmeralda email this worker registers its identity key against.
+  // Workers are no longer anonymous: a worker's identity must be a registered,
+  // allowlisted key (≤4 keys/email), which is what bounds the Sybil/grinding
+  // attack on claim selection (THREAT_MODEL.md R-010). Required.
+  email: (process.env.EDGECLOUD_EMAIL || '').trim().toLowerCase(),
   // The unprivileged uid/gid that UNTRUSTED submitted code is dropped to. Set
   // in the Docker image; unset in local dev/tests (jobs then run in-process as
   // the current user — fine for trusted local runs, NOT for production).

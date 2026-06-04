@@ -10,7 +10,7 @@ import {
   validateEndorsementShape,
 } from '@edgecloud/shared/trust.js';
 import { verifyEnvelope } from '@edgecloud/shared/envelope.js';
-import { validateResult } from '@edgecloud/shared/result.js';
+import { verifyResult } from '@edgecloud/shared/result.js';
 import { GENESIS_SERVER_KEY } from '@edgecloud/shared/constants.js';
 
 export function createIndexers({ databases, q, genesisKey = GENESIS_SERVER_KEY, log = console.log }) {
@@ -24,7 +24,9 @@ export function createIndexers({ databases, q, genesisKey = GENESIS_SERVER_KEY, 
 
   function indexRegistryEntry(entry) {
     if (verifyAttestation(entry, state.trustedServers) !== null) return false;
-    return q.upsertRegisteredKey(entry.pubkey, entry.emailHmac, entry.addedAt);
+    // `role` is advisory metadata on the entry (not part of the signed
+    // attestation message); default to 'user' for legacy entries without it.
+    return q.upsertRegisteredKey(entry.pubkey, entry.emailHmac, entry.addedAt, entry.role === 'worker' ? 'worker' : 'user');
   }
 
   function indexJobEntry(env) {
@@ -33,8 +35,12 @@ export function createIndexers({ databases, q, genesisKey = GENESIS_SERVER_KEY, 
   }
 
   function indexResultDoc(doc) {
-    if (!doc || validateResult(doc) !== null) return false;
-    if (q.getCachedResult(doc.jobId)) return false; // first result wins
+    // Verify the worker's SIGNATURE before caching/serving — the results DB is
+    // open-write, so an unsigned/forged result must never reach a user. This
+    // closes third-party result forgery (THREAT_MODEL.md R-003); a registered
+    // worker signing a wrong answer is a separate, documented future problem.
+    if (!doc || verifyResult(doc) !== null) return false;
+    if (q.getCachedResult(doc.jobId)) return false; // first VALID result wins
     q.cacheResult(doc.jobId, JSON.stringify(doc));
     return true;
   }

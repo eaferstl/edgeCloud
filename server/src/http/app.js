@@ -19,7 +19,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const MODULES_DIR = path.join(__dirname, '..', 'modules');
 
-export function createApp({ q, auth, databases, indexers, heartbeats, serverKey, libp2p, config, log = console.log }) {
+export function createApp({ q, auth, databases, indexers, heartbeats, serverKey, libp2p, config, sse, buildStatus, log = console.log }) {
   const app = express();
   app.use(express.json({ limit: '6mb' }));
 
@@ -185,17 +185,14 @@ export function createApp({ q, auth, databases, indexers, heartbeats, serverKey,
   });
 
   app.get('/api/status', (req, res) => {
-    res.json({
-      workersOnline: heartbeats.count(),
-      workers: heartbeats.online(),
-      devices: heartbeats.devices(), // capability records (cpu/ram/storage/capacity)
-      fleetAvailableCapacity: heartbeats.totalAvailableCapacity(),
-      registeredKeys: q.registeredKeyCount(),
-      jobsSubmitted: q.submissionCount(),
-      allowlistedEmails: q.allowlistCount(),
-      cachedResults: q.cachedResultCount(),
-      trustedServers: indexers.state.trustedServers.size,
-    });
+    res.json(buildStatus());
+  });
+
+  // Live push channel (Server-Sent Events) for the execution map: emits a
+  // `status` snapshot on connect + on fleet changes, and an `execution` event
+  // the instant a result is cached. EventSource on the browser auto-reconnects.
+  app.get('/api/events', (req, res) => {
+    sse.handler(req, res, buildStatus());
   });
 
   // ---------- admin (localhost only): endorse another central server ----------

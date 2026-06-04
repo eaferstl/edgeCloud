@@ -13,7 +13,7 @@ import { verifyEnvelope } from '@edgecloud/shared/envelope.js';
 import { verifyResult } from '@edgecloud/shared/result.js';
 import { GENESIS_SERVER_KEY } from '@edgecloud/shared/constants.js';
 
-export function createIndexers({ databases, q, genesisKey = GENESIS_SERVER_KEY, log = console.log }) {
+export function createIndexers({ databases, q, genesisKey = GENESIS_SERVER_KEY, log = console.log, onResultCached = () => {} }) {
   const state = {
     trustedServers: new Map(), // serverPubkey -> {multiaddrs, label}
   };
@@ -86,7 +86,11 @@ export function createIndexers({ databases, q, genesisKey = GENESIS_SERVER_KEY, 
     });
     databases.results.events.on('update', (entry) => {
       const v = entry?.payload?.value;
-      if (v && indexResultDoc(v)) log(`[results] cached result for ${v.jobId?.slice(0, 12)}… from ${v.executedBy}`);
+      if (v && indexResultDoc(v)) {
+        log(`[results] cached result for ${v.jobId?.slice(0, 12)}… from ${v.executedBy}`);
+        // push to live-map subscribers the instant a result is cached
+        onResultCached({ jobId: v.jobId, executedBy: v.executedBy, ok: v.ok, ts: Date.now() });
+      }
     });
   }
 

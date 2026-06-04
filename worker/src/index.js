@@ -102,6 +102,7 @@ async function main() {
   const publishHeartbeat = async () => {
     try {
       const record = await buildDeviceRecord(workerKey.publicKey, coordinator.live);
+      record.libp2pPeerId = peerId; // transport peerId → lets the server resolve our IP for the live map
       await libp2p.services.pubsub.publish(TOPIC_HEARTBEAT, new TextEncoder().encode(JSON.stringify(record)));
     } catch {
       /* transient pubsub/metadata error; next tick retries */

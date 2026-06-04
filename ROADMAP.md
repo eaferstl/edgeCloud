@@ -36,6 +36,14 @@ OrbitDB-coordinated exactly-once-ish claim protocol, hardened Docker workers. Se
   fetch/put + integrity checks in the worker.
 - **Streaming / interactive jobs** — stdin/stdout streaming, or sending events to a
   running job.
+- **Client-side parallel fan-out (map-reduce).** Split one logical task into chunks,
+  submit them as independent jobs that **fan out to multiple workers at once**, then
+  collect + combine the results in the browser/SDK. Showcases true parallelism across the
+  network and pairs beautifully with the live map (N streams out, N results replicating
+  back). Crowd-pleasing demos: a **tiled Mandelbrot** render stitched from per-strip
+  workers, **Monte Carlo π**, or a **distributed search / proof-of-work race**. Needs:
+  a small browser/SDK orchestrator that submits N jobs, awaits N results (the SSE
+  execution events already make this evented), and reduces them.
 
 ## B. Trust & verification (don't trust the worker)
 

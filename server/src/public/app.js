@@ -90,12 +90,35 @@ function saveIdentity(id) { localStorage.setItem(LS_IDENTITY, JSON.stringify(id)
 
 function renderIdentity() {
   var id = loadIdentity();
+  // Once a key exists the whole identity section disappears, so the live map sits
+  // right next to the submit box; a compact "key · forget" line lives in the job card.
+  $('identityCard').hidden = !!id;
   $('noIdentity').hidden = !!id;
   $('hasIdentity').hidden = !id;
   if (id) {
     $('identityEmail').textContent = id.email;
     $('identityPubkey').textContent = id.publicKey;
   }
+  var who = $('whoami');
+  if (who) {
+    who.textContent = '';
+    if (id) {
+      who.hidden = false;
+      who.appendChild(document.createTextNode('🔑 ' + (id.email || '') + ' · '));
+      var a = document.createElement('a');
+      a.href = '#'; a.textContent = 'forget key';
+      a.addEventListener('click', function (e) { e.preventDefault(); forgetKey(); });
+      who.appendChild(a);
+    } else {
+      who.hidden = true;
+    }
+  }
+}
+
+function forgetKey() {
+  if (!confirm('Forget this key? You will lose access to results submitted with it.')) return;
+  localStorage.removeItem(LS_IDENTITY);
+  renderIdentity();
 }
 
 $('registerForm').addEventListener('submit', async function (e) {
@@ -271,6 +294,7 @@ function buildEnvelope(zipB64, identity) {
 
 // --- submission + result polling ---
 var pollTimer = null;
+var awaiting = null; // { jobId, done, deliver } — the result this page is waiting on
 
 $('submitBtn').addEventListener('click', async function () {
   var identity = loadIdentity();
@@ -345,21 +369,32 @@ function showResultCard(jobId) {
   $('resultOut').hidden = true;
   $('resultErr').hidden = true;
   $('resultMeta').hidden = true;
-  $('resultCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  // no auto-scroll — keep the live map in view during the demo
 }
 
+// Wait for a job's result. Primary path is EVENTED: the SSE 'execution' event
+// for this jobId triggers `deliver()` the instant it's cached (handleExecution).
+// A slow status poll stays as a fallback in case SSE is unavailable/missed.
 function pollForResult(jobId) {
   if (pollTimer) clearInterval(pollTimer);
   var started = Date.now();
-  pollTimer = setInterval(async function () {
+  var deliver = async function () {
+    if (!awaiting || awaiting.jobId !== jobId || awaiting.done) return;
+    awaiting.done = true;
+    if (pollTimer) clearInterval(pollTimer);
     try {
-      var res = await fetch('/api/jobs/' + jobId + '/status');
-      var body = await res.json();
-      if (body.status === 'done') {
-        clearInterval(pollTimer);
-        var result = await fetchResultAuthed(jobId);
-        renderResult(jobId, result, false);
-      } else if (Date.now() - started > 120000) {
+      renderResult(jobId, await fetchResultAuthed(jobId), false);
+    } catch (e) {
+      awaiting.done = false; // let the poll retry
+    }
+  };
+  awaiting = { jobId: jobId, done: false, deliver: deliver };
+  pollTimer = setInterval(async function () {
+    if (!awaiting || awaiting.done) { clearInterval(pollTimer); return; }
+    try {
+      var body = await (await fetch('/api/jobs/' + jobId + '/status')).json();
+      if (body.status === 'done') deliver();
+      else if (Date.now() - started > 120000) {
         clearInterval(pollTimer);
         $('resultStatus').className = 'msg err';
         $('resultStatus').textContent = 'No result after 2 minutes — are any worker nodes online?';
@@ -499,6 +534,7 @@ async function refreshStatus() {
   try {
     lastStatus = await (await fetch('/api/status')).json();
     renderPill(lastStatus);
+    renderViz(lastStatus);
   } catch (e) {
     $('netStatus').classList.remove('online');
     $('netStatus').textContent = 'Server unreachable';
@@ -506,8 +542,236 @@ async function refreshStatus() {
   }
 }
 
+// ===================== live execution map =====================
+// Rendezvous/OrbitDB in the center; worker nodes around it labeled with IP +
+// proximity. When a job completes, a packet glides from the center to the worker
+// that ran it and the node pulses. Layout radius is driven by rttMs (proximity)
+// once the latency work lands; until then nodes sit at a fixed radius.
+var SVGNS = 'http://www.w3.org/2000/svg';
+function svgEl(name, attrs) {
+  var e = document.createElementNS(SVGNS, name);
+  if (attrs) for (var k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
+var VIZ = {
+  inited: false, center: { x: 500, y: 195 },
+  layers: {}, nodeEls: {}, linkEls: {}, pos: {},
+  seen: new Set(), seeded: false,
+};
+
+function initViz() {
+  var svg = $('vizSvg');
+  if (!svg || VIZ.inited) return;
+  var defs = svg.appendChild(svgEl('defs'));
+  var glow = svgEl('filter', { id: 'vizWhiteGlow', filterUnits: 'userSpaceOnUse', x: -1000, y: -1000, width: 3000, height: 3000 });
+  glow.appendChild(svgEl('feGaussianBlur', { in: 'SourceGraphic', stdDeviation: 2.4, result: 'blur' }));
+  var merge = svgEl('feMerge');
+  merge.appendChild(svgEl('feMergeNode', { in: 'blur' }));
+  merge.appendChild(svgEl('feMergeNode', { in: 'SourceGraphic' }));
+  glow.appendChild(merge);
+  defs.appendChild(glow);
+  VIZ.layers.links = svg.appendChild(svgEl('g', { id: 'vizLinks' }));
+  VIZ.layers.packets = svg.appendChild(svgEl('g', { id: 'vizPackets' }));
+  VIZ.layers.nodes = svg.appendChild(svgEl('g', { id: 'vizNodes' }));
+  // rendezvous / OrbitDB node (built once)
+  var c = VIZ.center;
+  var g = svgEl('g', { class: 'viz-server', transform: 'translate(' + c.x + ',' + c.y + ')' });
+  g.appendChild(svgEl('circle', { class: 'body', r: 42 }));
+  var t1 = svgEl('text', { class: 't1', 'text-anchor': 'middle', y: -5 }); t1.textContent = 'RENDEZVOUS';
+  var t2 = svgEl('text', { class: 't2', 'text-anchor': 'middle', y: 14 }); t2.textContent = 'OrbitDB · libp2p';
+  var t3 = svgEl('text', { class: 't2', 'text-anchor': 'middle', y: 68 }); t3.textContent = location.hostname;
+  g.appendChild(t1); g.appendChild(t2); g.appendChild(t3);
+  VIZ.layers.nodes.appendChild(g);
+  VIZ.empty = svgEl('text', { class: 'viz-empty', 'text-anchor': 'middle', x: c.x, y: c.y + 140 });
+  VIZ.empty.textContent = 'no worker nodes online yet';
+  svg.appendChild(VIZ.empty);
+  VIZ.inited = true;
+}
+
+function layoutViz(devices) {
+  var c = VIZ.center, rx = 415, ry = 145, n = devices.length, pos = {};
+  var rtts = devices.map(function (d) { return typeof d.rttMs === 'number' ? d.rttMs : null; });
+  var maxRtt = Math.max.apply(null, rtts.filter(function (x) { return x != null; }).concat([1]));
+  devices.forEach(function (d, i) {
+    var ang = -Math.PI / 2 + (n ? (i / n) * 2 * Math.PI : 0);
+    var f = typeof d.rttMs === 'number' ? (0.5 + 0.5 * (d.rttMs / (maxRtt || 1))) : 1; // closer = lower rtt
+    pos[d.peerId] = { x: c.x + rx * f * Math.cos(ang), y: c.y + ry * f * Math.sin(ang) };
+  });
+  return pos;
+}
+
+function renderViz(s) {
+  if (!$('vizSvg')) return;
+  initViz();
+  var devices = (s.devices || []).slice().sort(function (a, b) { return a.peerId < b.peerId ? -1 : 1; });
+  var c = VIZ.center;
+  VIZ.pos = layoutViz(devices);
+  if (VIZ.empty) VIZ.empty.style.display = devices.length ? 'none' : '';
+  var live = {};
+
+  devices.forEach(function (d) {
+    var id = d.peerId, p = VIZ.pos[id]; live[id] = true;
+    var statusCls = (d.currentLoad > 0 ? 'busy' : 'available');
+    // link
+    var link = VIZ.linkEls[id];
+    if (!link) { link = svgEl('line', { class: 'viz-link' }); VIZ.layers.links.appendChild(link); VIZ.linkEls[id] = link; }
+    link.setAttribute('x1', c.x); link.setAttribute('y1', c.y); link.setAttribute('x2', p.x); link.setAttribute('y2', p.y);
+    // node
+    var n = VIZ.nodeEls[id];
+    if (!n) {
+      n = svgEl('g', { class: 'viz-node' });
+      n._ring = svgEl('circle', { class: 'ring', r: 28 });
+      n.appendChild(n._ring);
+      n.appendChild(svgEl('circle', { class: 'body', r: 21 }));
+      n._nm = svgEl('text', { class: 'nm', 'text-anchor': 'middle', y: -36 });
+      n._ip = svgEl('text', { class: 'ip', 'text-anchor': 'middle', y: 41 });
+      n._px = svgEl('text', { class: 'px', 'text-anchor': 'middle', y: 58 });
+      n.appendChild(n._nm); n.appendChild(n._ip); n.appendChild(n._px);
+      VIZ.layers.nodes.appendChild(n); VIZ.nodeEls[id] = n;
+    }
+    n.setAttribute('transform', 'translate(' + p.x + ',' + p.y + ')');
+    n.setAttribute('class', 'viz-node ' + statusCls + (n.classList.contains('pulsing') ? ' pulsing' : ''));
+    n._nm.textContent = (d.peerId || '').slice(0, 8);
+    n._ip.textContent = d.ip || '—';
+    n._px.textContent = (typeof d.rttMs === 'number') ? ('~' + Math.round(d.rttMs) + ' ms')
+      : (d.link === 'direct' ? 'direct · 1 hop' : d.link === 'relay' ? 'via relay · 2 hops' : '—');
+  });
+
+  // remove departed workers
+  Object.keys(VIZ.nodeEls).forEach(function (id) {
+    if (!live[id]) {
+      if (VIZ.nodeEls[id].parentNode) VIZ.nodeEls[id].parentNode.removeChild(VIZ.nodeEls[id]);
+      if (VIZ.linkEls[id] && VIZ.linkEls[id].parentNode) VIZ.linkEls[id].parentNode.removeChild(VIZ.linkEls[id]);
+      delete VIZ.nodeEls[id]; delete VIZ.linkEls[id];
+    }
+  });
+
+}
+
+// Seed VIZ.seen from a status snapshot's history so a reconnect backlog isn't
+// re-animated. Live executions are animated by handleExecution (from the SSE
+// 'execution' event, or the polling fallback's diff).
+function processExecutions(execs) {
+  (execs || []).forEach(function (e) { if (e && e.jobId) VIZ.seen.add(e.jobId); });
+}
+
+function handleExecution(e) {
+  if (!e || !e.jobId || VIZ.seen.has(e.jobId)) return;
+  VIZ.seen.add(e.jobId);
+  // a job this browser is waiting on just finished → fetch its result NOW (evented)
+  if (awaiting && awaiting.jobId === e.jobId && awaiting.deliver) awaiting.deliver();
+  if (e.ts && e.ts < Date.now() - 60000) return; // stale backlog → don't animate
+  if (e.executedBy && VIZ.pos[e.executedBy]) {
+    animateLink(e.executedBy);                 // 1. job streams out to the worker (white)
+    pulseNode(e.executedBy);                   // 2. the worker runs it (purple pulse)
+    setTimeout(function () { replicateResult(e.executedBy); }, 1950); // 3. result replicates to every node (teal, p2p)
+  }
+}
+
+// A STREAM of small dashes flowing from one point to another along a straight
+// line — reads as data moving down a wire, not a single energy bolt. Steady
+// (linear), moderate pace; removes itself after the SMIL animation.
+function flowStream(from, to, opts) {
+  opts = opts || {};
+  var layer = VIZ.layers.packets; if (!layer || !from || !to) return;
+  var DUR = opts.dur || 1.6;
+  var pulse = svgEl('line', {
+    class: 'viz-link-pulse',
+    x1: from.x, y1: from.y, x2: to.x, y2: to.y,
+    filter: 'url(#vizWhiteGlow)',
+    'stroke-dasharray': '6 16',
+    'stroke-dashoffset': 0,
+  });
+  if (opts.stroke) pulse.setAttribute('stroke', opts.stroke);
+  // negative offset flows the dashes from → to; fixed velocity (≈183px/s) so the
+  // visual speed is identical regardless of line length or duration.
+  var dash = svgEl('animate', { attributeName: 'stroke-dashoffset', from: 0, to: -Math.round(183 * DUR), dur: DUR + 's', fill: 'freeze', calcMode: 'linear' });
+  var fade = svgEl('animate', { attributeName: 'opacity', values: '0;0.85;0.85;0', keyTimes: '0;0.18;0.72;1', dur: DUR + 's', fill: 'freeze' });
+  pulse.appendChild(dash); pulse.appendChild(fade);
+  layer.appendChild(pulse);
+  try { dash.beginElement(); fade.beginElement(); } catch (e) {}
+  setTimeout(function () { if (pulse.parentNode) pulse.parentNode.removeChild(pulse); }, DUR * 1000 + 250);
+}
+
+// Job dispatch: white data streams from the rendezvous out to the chosen worker.
+function animateLink(peerId) {
+  if (VIZ.pos[peerId]) flowStream(VIZ.center, VIZ.pos[peerId], { dur: 1.8 });
+}
+
+// Result written back, the DECENTRALIZED way: it flows from the worker to the
+// rendezvous, then replicates p2p to EVERY other node (CRDT gossip) — so the
+// answer ends up on all nodes, not just where it ran. Teal = the result.
+var RESULT_COLOR = '#54e3c2';
+function replicateResult(peerId) {
+  var from = VIZ.pos[peerId]; if (!from) return;
+  flowStream(from, VIZ.center, { dur: 1.3, stroke: RESULT_COLOR }); // worker → rendezvous
+  pulseNode(peerId, RESULT_COLOR);
+  setTimeout(function () {
+    var others = Object.keys(VIZ.pos).filter(function (id) { return id !== peerId; });
+    others.forEach(function (id, i) {
+      setTimeout(function () {
+        flowStream(VIZ.center, VIZ.pos[id], { dur: 1.2, stroke: RESULT_COLOR }); // rendezvous → every other node
+        pulseNode(id, RESULT_COLOR);
+      }, i * 130); // slight stagger = the result gossiping out across the mesh
+    });
+  }, 1050);
+}
+
+// Send a glowing "job" packet gliding from the rendezvous out to the worker that
+// ran it. Uses SMIL <animate> on cx/cy (rock-solid across browsers, unlike CSS
+// transforms on SVG) so the motion is actually visible.
+function flyPacket(to) {
+  var layer = VIZ.layers.packets; if (!layer || !to) return;
+  var c = VIZ.center, DUR = 1.0;
+  var dot = svgEl('circle', { cx: c.x, cy: c.y, r: 9, class: 'viz-packet' });
+  var aX = svgEl('animate', { attributeName: 'cx', from: c.x, to: to.x, dur: DUR + 's', fill: 'freeze', calcMode: 'spline', keyTimes: '0;1', keySplines: '0.35 0 0.25 1' });
+  var aY = svgEl('animate', { attributeName: 'cy', from: c.y, to: to.y, dur: DUR + 's', fill: 'freeze', calcMode: 'spline', keyTimes: '0;1', keySplines: '0.35 0 0.25 1' });
+  // brief fade-in then fade-out so it reads as a pulse of data along the link
+  var aO = svgEl('animate', { attributeName: 'opacity', values: '0;1;1;0', keyTimes: '0;0.12;0.8;1', dur: DUR + 's', fill: 'freeze' });
+  dot.appendChild(aX); dot.appendChild(aY); dot.appendChild(aO);
+  layer.appendChild(dot);
+  setTimeout(function () { if (dot.parentNode) dot.parentNode.removeChild(dot); }, DUR * 1000 + 200);
+}
+
+function pulseNode(peerId, color) {
+  var n = VIZ.nodeEls[peerId]; if (!n) return;
+  if (n._ring) n._ring.setAttribute('stroke', color || '#b388ff'); // purple = ran it; teal = got the result
+  n.classList.remove('pulsing'); try { n.getBBox(); } catch (e) {} // reflow → restart animation
+  n.classList.add('pulsing');
+  setTimeout(function () { n.classList.remove('pulsing'); }, 950);
+}
+
+// Live updates: prefer SSE push (executions arrive the instant they happen);
+// fall back to polling only if EventSource is unavailable.
+function startLiveFeed() {
+  if (typeof EventSource === 'undefined') { startPolling(); return; }
+  var es;
+  try { es = new EventSource('/api/events'); } catch (e) { startPolling(); return; }
+  var seeded = false;
+  es.addEventListener('status', function (ev) {
+    var s; try { s = JSON.parse(ev.data); } catch (x) { return; }
+    lastStatus = s; renderPill(s); renderViz(s);
+    if (!seeded) { processExecutions(s.recentExecutions); seeded = true; } // don't replay history
+  });
+  es.addEventListener('execution', function (ev) {
+    try { handleExecution(JSON.parse(ev.data)); } catch (x) {}
+  });
+  es.onerror = function () { $('netStatus').classList.remove('online'); }; // EventSource auto-reconnects
+}
+function startPolling() {
+  var first = true;
+  var tick = function () {
+    refreshStatus().then(function () {
+      if (!lastStatus) return;
+      if (first) { processExecutions(lastStatus.recentExecutions); first = false; }
+      else { var ex = lastStatus.recentExecutions || []; for (var i = ex.length - 1; i >= 0; i--) handleExecution(ex[i]); }
+    });
+  };
+  tick();
+  setInterval(tick, 3000);
+}
+
 renderIdentity();
 renderHistory();
 populateExamples();
-refreshStatus();
-setInterval(refreshStatus, 10000);
+startLiveFeed();

@@ -137,5 +137,20 @@ export function makeQueries(db, sharedSalt) {
       return row ? JSON.parse(row.result_json) : null;
     },
     cachedResultCount: () => db.prepare('SELECT COUNT(*) c FROM result_cache').get().c,
+    // Most-recent completed executions, for the live execution map: who ran what,
+    // newest first. cached_at ≈ when the result reached this server.
+    recentResults: (limit = 24) =>
+      db
+        .prepare('SELECT job_id, result_json, cached_at FROM result_cache ORDER BY cached_at DESC LIMIT ?')
+        .all(limit)
+        .map((row) => {
+          let r = {};
+          try {
+            r = JSON.parse(row.result_json);
+          } catch {
+            /* leave blank */
+          }
+          return { jobId: row.job_id, executedBy: r.executedBy ?? null, ok: r.ok ?? null, ts: row.cached_at };
+        }),
   };
 }

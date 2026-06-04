@@ -66,6 +66,20 @@ export function watchHeartbeats(libp2p, log = console.log, onChange = () => {}) 
     return null;
   }
 
+  // Topology proximity the rendezvous can see right now: a direct (1-hop)
+  // connection vs only a relayed (2-hop, through us) one. Real "ms" replaces
+  // this once the latency module reports rttMs in the heartbeat.
+  function connKind(libp2pPeerId) {
+    if (!libp2pPeerId) return null;
+    try {
+      const conns = libp2p.getConnections().filter((c) => c.remotePeer.toString() === libp2pPeerId);
+      if (!conns.length) return null;
+      return conns.some((c) => !c.remoteAddr.toString().includes('p2p-circuit')) ? 'direct' : 'relay';
+    } catch {
+      return null;
+    }
+  }
+
   // Project a device record into the public status shape (omit nothing
   // sensitive — these are host capability facts, no PII).
   function summary(peerId, d) {
@@ -84,6 +98,7 @@ export function watchHeartbeats(libp2p, log = console.log, onChange = () => {}) 
       // --- live-map fields ---
       ip: ipFor(transportPeerId), // server-observed source IP (null if relayed/unknown)
       libp2pPeerId: transportPeerId,
+      link: connKind(transportPeerId), // 'direct' (1 hop) | 'relay' (2 hops) | null
       // proximity to the rendezvous: filled in once the latency work lands (the
       // worker can carry rttMs in its heartbeat); the UI lays out by this.
       rttMs: typeof r.rttMs === 'number' ? r.rttMs : null,

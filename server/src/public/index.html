@@ -42,13 +42,13 @@
         <span class="viz-title">⚡ Live execution map</span>
         <span id="vizHint" class="viz-hint small">jobs flowing from the rendezvous / OrbitDB to the worker that runs them</span>
       </div>
-      <svg id="vizSvg" viewBox="0 0 1000 300" preserveAspectRatio="xMidYMid meet"
+      <svg id="vizSvg" viewBox="0 0 1000 400" preserveAspectRatio="xMidYMid meet"
            role="img" aria-label="Live map of worker nodes executing jobs"></svg>
     </section>
 
     <!-- Step 1: identity -->
     <section class="card" id="identityCard">
-      <h2>1 · Your identity</h2>
+      <h2>Your identity</h2>
       <div id="noIdentity">
         <p>Enter the email you used to register for Edge Esmeralda. A keypair is created
            <em>in your browser</em> and stays in this browser (localStorage); only the public
@@ -68,7 +68,8 @@
 
     <!-- Step 2: job -->
     <section class="card" id="jobCard">
-      <h2>2 · Submit a job</h2>
+      <h2>Submit a job</h2>
+      <p id="whoami" class="small" hidden></p>
       <label for="exampleSelect">What should the network compute?</label>
       <select id="exampleSelect"></select>
       <div id="jsEditor">
@@ -82,7 +83,7 @@
 
     <!-- Step 3: result -->
     <section class="card" id="resultCard" hidden>
-      <h2>3 · Result</h2>
+      <h2>Result</h2>
       <p class="small mono">job <span id="resultJobId"></span></p>
       <p id="resultStatus" class="msg"></p>
       <pre id="resultOut" hidden></pre>

@@ -90,12 +90,35 @@ function saveIdentity(id) { localStorage.setItem(LS_IDENTITY, JSON.stringify(id)
 
 function renderIdentity() {
   var id = loadIdentity();
+  // Once a key exists the whole identity section disappears, so the live map sits
+  // right next to the submit box; a compact "key · forget" line lives in the job card.
+  $('identityCard').hidden = !!id;
   $('noIdentity').hidden = !!id;
   $('hasIdentity').hidden = !id;
   if (id) {
     $('identityEmail').textContent = id.email;
     $('identityPubkey').textContent = id.publicKey;
   }
+  var who = $('whoami');
+  if (who) {
+    who.textContent = '';
+    if (id) {
+      who.hidden = false;
+      who.appendChild(document.createTextNode('🔑 ' + (id.email || '') + ' · '));
+      var a = document.createElement('a');
+      a.href = '#'; a.textContent = 'forget key';
+      a.addEventListener('click', function (e) { e.preventDefault(); forgetKey(); });
+      who.appendChild(a);
+    } else {
+      who.hidden = true;
+    }
+  }
+}
+
+function forgetKey() {
+  if (!confirm('Forget this key? You will lose access to results submitted with it.')) return;
+  localStorage.removeItem(LS_IDENTITY);
+  renderIdentity();
 }
 
 $('registerForm').addEventListener('submit', async function (e) {
@@ -531,7 +554,7 @@ function svgEl(name, attrs) {
   return e;
 }
 var VIZ = {
-  inited: false, center: { x: 500, y: 152 },
+  inited: false, center: { x: 500, y: 195 },
   layers: {}, nodeEls: {}, linkEls: {}, pos: {},
   seen: new Set(), seeded: false,
 };
@@ -545,20 +568,20 @@ function initViz() {
   // rendezvous / OrbitDB node (built once)
   var c = VIZ.center;
   var g = svgEl('g', { class: 'viz-server', transform: 'translate(' + c.x + ',' + c.y + ')' });
-  g.appendChild(svgEl('circle', { class: 'body', r: 34 }));
-  var t1 = svgEl('text', { class: 't1', 'text-anchor': 'middle', y: -4 }); t1.textContent = 'RENDEZVOUS';
-  var t2 = svgEl('text', { class: 't2', 'text-anchor': 'middle', y: 12 }); t2.textContent = 'OrbitDB · libp2p';
-  var t3 = svgEl('text', { class: 't2', 'text-anchor': 'middle', y: 50 }); t3.textContent = location.hostname;
+  g.appendChild(svgEl('circle', { class: 'body', r: 42 }));
+  var t1 = svgEl('text', { class: 't1', 'text-anchor': 'middle', y: -5 }); t1.textContent = 'RENDEZVOUS';
+  var t2 = svgEl('text', { class: 't2', 'text-anchor': 'middle', y: 14 }); t2.textContent = 'OrbitDB · libp2p';
+  var t3 = svgEl('text', { class: 't2', 'text-anchor': 'middle', y: 68 }); t3.textContent = location.hostname;
   g.appendChild(t1); g.appendChild(t2); g.appendChild(t3);
   VIZ.layers.nodes.appendChild(g);
-  VIZ.empty = svgEl('text', { class: 'viz-empty', 'text-anchor': 'middle', x: c.x, y: c.y + 96 });
+  VIZ.empty = svgEl('text', { class: 'viz-empty', 'text-anchor': 'middle', x: c.x, y: c.y + 140 });
   VIZ.empty.textContent = 'no worker nodes online yet';
   svg.appendChild(VIZ.empty);
   VIZ.inited = true;
 }
 
 function layoutViz(devices) {
-  var c = VIZ.center, rx = 400, ry = 92, n = devices.length, pos = {};
+  var c = VIZ.center, rx = 415, ry = 145, n = devices.length, pos = {};
   var rtts = devices.map(function (d) { return typeof d.rttMs === 'number' ? d.rttMs : null; });
   var maxRtt = Math.max.apply(null, rtts.filter(function (x) { return x != null; }).concat([1]));
   devices.forEach(function (d, i) {
@@ -589,11 +612,11 @@ function renderViz(s) {
     var n = VIZ.nodeEls[id];
     if (!n) {
       n = svgEl('g', { class: 'viz-node' });
-      n.appendChild(svgEl('circle', { class: 'ring', r: 17 }));
-      n.appendChild(svgEl('circle', { class: 'body', r: 14 }));
-      n._nm = svgEl('text', { class: 'nm', 'text-anchor': 'middle', y: -24 });
-      n._ip = svgEl('text', { class: 'ip', 'text-anchor': 'middle', y: 30 });
-      n._px = svgEl('text', { class: 'px', 'text-anchor': 'middle', y: 44 });
+      n.appendChild(svgEl('circle', { class: 'ring', r: 28 }));
+      n.appendChild(svgEl('circle', { class: 'body', r: 21 }));
+      n._nm = svgEl('text', { class: 'nm', 'text-anchor': 'middle', y: -36 });
+      n._ip = svgEl('text', { class: 'ip', 'text-anchor': 'middle', y: 41 });
+      n._px = svgEl('text', { class: 'px', 'text-anchor': 'middle', y: 58 });
       n.appendChild(n._nm); n.appendChild(n._ip); n.appendChild(n._px);
       VIZ.layers.nodes.appendChild(n); VIZ.nodeEls[id] = n;
     }
@@ -601,7 +624,8 @@ function renderViz(s) {
     n.setAttribute('class', 'viz-node ' + statusCls + (n.classList.contains('pulsing') ? ' pulsing' : ''));
     n._nm.textContent = (d.peerId || '').slice(0, 8);
     n._ip.textContent = d.ip || '—';
-    n._px.textContent = (typeof d.rttMs === 'number') ? ('~' + Math.round(d.rttMs) + ' ms') : 'measuring…';
+    n._px.textContent = (typeof d.rttMs === 'number') ? ('~' + Math.round(d.rttMs) + ' ms')
+      : (d.link === 'direct' ? 'direct · 1 hop' : d.link === 'relay' ? 'via relay · 2 hops' : '—');
   });
 
   // remove departed workers
@@ -631,17 +655,20 @@ function handleExecution(e) {
   if (e.executedBy && VIZ.pos[e.executedBy]) { flyPacket(VIZ.pos[e.executedBy]); pulseNode(e.executedBy); }
 }
 
+// Send a glowing "job" packet gliding from the rendezvous out to the worker that
+// ran it. Uses SMIL <animate> on cx/cy (rock-solid across browsers, unlike CSS
+// transforms on SVG) so the motion is actually visible.
 function flyPacket(to) {
   var layer = VIZ.layers.packets; if (!layer || !to) return;
-  var c = VIZ.center;
-  var dot = svgEl('circle', { cx: c.x, cy: c.y, r: 5.5, class: 'viz-packet' });
-  dot.style.transform = 'translate(0px,0px)';
+  var c = VIZ.center, DUR = 1.0;
+  var dot = svgEl('circle', { cx: c.x, cy: c.y, r: 9, class: 'viz-packet' });
+  var aX = svgEl('animate', { attributeName: 'cx', from: c.x, to: to.x, dur: DUR + 's', fill: 'freeze', calcMode: 'spline', keyTimes: '0;1', keySplines: '0.35 0 0.25 1' });
+  var aY = svgEl('animate', { attributeName: 'cy', from: c.y, to: to.y, dur: DUR + 's', fill: 'freeze', calcMode: 'spline', keyTimes: '0;1', keySplines: '0.35 0 0.25 1' });
+  // brief fade-in then fade-out so it reads as a pulse of data along the link
+  var aO = svgEl('animate', { attributeName: 'opacity', values: '0;1;1;0', keyTimes: '0;0.12;0.8;1', dur: DUR + 's', fill: 'freeze' });
+  dot.appendChild(aX); dot.appendChild(aY); dot.appendChild(aO);
   layer.appendChild(dot);
-  requestAnimationFrame(function () { requestAnimationFrame(function () {
-    dot.style.transform = 'translate(' + (to.x - c.x) + 'px,' + (to.y - c.y) + 'px)';
-  }); });
-  setTimeout(function () { dot.style.opacity = '0'; }, 880);
-  setTimeout(function () { if (dot.parentNode) dot.parentNode.removeChild(dot); }, 1400);
+  setTimeout(function () { if (dot.parentNode) dot.parentNode.removeChild(dot); }, DUR * 1000 + 200);
 }
 
 function pulseNode(peerId) {

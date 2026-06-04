@@ -26,9 +26,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # wasmtime CLI, pinned. Bump against https://github.com/bytecodealliance/wasmtime/releases
 ARG WASMTIME_VERSION=v45.0.0
-RUN curl -fsSL "https://github.com/bytecodealliance/wasmtime/releases/download/${WASMTIME_VERSION}/wasmtime-${WASMTIME_VERSION}-x86_64-linux.tar.xz" \
+# TARGETARCH is set automatically by BuildKit (Docker Desktop's default builder):
+# `amd64` on Intel/x86, `arm64` on Apple Silicon. Map it to wasmtime's release
+# naming so the image builds NATIVELY on both — no `--platform linux/amd64`
+# emulation (which is slow AND breaks the iptables firewall + setpriv under QEMU).
+ARG TARGETARCH
+RUN case "${TARGETARCH:-amd64}" in \
+      amd64) WT_ARCH=x86_64 ;; \
+      arm64) WT_ARCH=aarch64 ;; \
+      *) echo "unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+ && curl -fsSL "https://github.com/bytecodealliance/wasmtime/releases/download/${WASMTIME_VERSION}/wasmtime-${WASMTIME_VERSION}-${WT_ARCH}-linux.tar.xz" \
       | tar -xJ -C /tmp \
- && mv /tmp/wasmtime-${WASMTIME_VERSION}-x86_64-linux/wasmtime /usr/local/bin/wasmtime \
+ && mv "/tmp/wasmtime-${WASMTIME_VERSION}-${WT_ARCH}-linux/wasmtime" /usr/local/bin/wasmtime \
  && rm -rf /tmp/wasmtime-* \
  && wasmtime --version
 

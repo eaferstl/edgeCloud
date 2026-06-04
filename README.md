@@ -63,6 +63,49 @@ It will appear at http://146.190.123.91/api/status (`workersOnline`, identified 
 `-e RENDEZVOUS_MULTIADDR=/ip4/<host>/tcp/4002/ws/p2p/<peerId>`. The container blocks egress
 to private IPs so submitted code can't reach your LAN.
 
+<a id="publish-prebuilt-worker"></a>
+#### Publish a prebuilt multi-arch worker image (optional)
+
+`docker compose up --build` already builds the worker **natively** on both Intel/x86
+(amd64) and Apple Silicon (arm64) — the Dockerfile maps BuildKit's `TARGETARCH` to the
+right wasmtime binary, so nobody needs `--platform linux/amd64` emulation. So you only
+need this if you'd rather **distribute** a prebuilt image (e.g. so a roomful of Mac users
+can `docker pull` one tag instead of each waiting on a local build).
+
+`worker/build-multiarch.sh` builds `linux/amd64,linux/arm64` in one buildx pass from the
+repo root and pushes a single multi-arch tag.
+
+Prerequisites:
+
+- Docker with **buildx** (bundled with Docker Desktop / recent Docker Engine).
+- **QEMU binfmt** for cross-arch emulation if your host is single-arch (Docker Desktop
+  ships it; on plain Linux run once: `docker run --privileged --rm tonistiigi/binfmt --install all`).
+- `docker login <registry>` with push rights to the target image.
+
+```bash
+# Verify the cross-build works (builds both arches, does NOT push):
+./worker/build-multiarch.sh
+
+# Publish a multi-arch tag (after docker login):
+IMAGE=ghcr.io/eaferstl/edgecloud-worker:latest PUSH=1 ./worker/build-multiarch.sh
+```
+
+A collaborator then skips the build entirely and just pulls + runs it (still **set
+`EDGECLOUD_EMAIL`** to their attendee email; the worker needs `CAP_NET_ADMIN` for its
+egress firewall):
+
+```bash
+docker pull ghcr.io/eaferstl/edgecloud-worker:latest
+docker run -d --cap-add NET_ADMIN \
+  -e EDGECLOUD_EMAIL=you@example.com \
+  -v edgecloud_worker_data:/data \
+  ghcr.io/eaferstl/edgecloud-worker:latest
+```
+
+Or with compose, point the `worker` service at the published `image:` instead of `build:`
+(keep the rest of `worker/docker-compose.yml` — the capability/seccomp/read-only hardening
+matters), then: `EDGECLOUD_EMAIL=you@example.com docker compose up -d`.
+
 ### 3. Operator — run your own central/rendezvous server
 
 Runs the relay + OrbitDB peer + webform. Servers are interchangeable and hold **no unique

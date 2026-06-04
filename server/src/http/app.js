@@ -117,21 +117,23 @@ export function createApp({ q, auth, databases, indexers, heartbeats, serverKey,
       return res.status(403).json({ error: 'public key is not registered' });
     }
     // Count every accepted submission (incl. duplicate/cached resubmissions) toward
-    // the public "jobs submitted" score, before any cache/dedup short-circuit.
+    // the public "jobs submitted" score, before any cache/dedup short-circuit. The
+    // new total rides back on every response so the pill can update instantly.
     q.bumpSubmissions();
     q.addJobSubmitter(env.jobId, env.pubkey, env.submittedAt ?? Date.now());
+    const jobsSubmitted = q.submissionCount();
 
     // Duplicate submission == cache hit: answer immediately, execute nothing.
     const cached = q.getCachedResult(env.jobId);
     if (cached) {
-      return res.json({ jobId: env.jobId, status: 'done', cached: true, result: cached });
+      return res.json({ jobId: env.jobId, status: 'done', cached: true, result: cached, jobsSubmitted });
     }
     if (q.jobSeen(env.jobId) && (await alreadyQueued(databases, env.jobId))) {
-      return res.json({ jobId: env.jobId, status: 'queued', cached: false });
+      return res.json({ jobId: env.jobId, status: 'queued', cached: false, jobsSubmitted });
     }
     await databases.jobs.add(env);
     log(`[jobs] queued ${env.jobId.slice(0, 12)}… from ${env.pubkey.slice(0, 12)}…`);
-    res.json({ jobId: env.jobId, status: 'queued', cached: false });
+    res.json({ jobId: env.jobId, status: 'queued', cached: false, jobsSubmitted });
   });
 
   app.get('/api/jobs/:jobId/status', (req, res) => {

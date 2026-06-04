@@ -318,6 +318,7 @@ $('submitBtn').addEventListener('click', async function () {
     if (!res.ok) throw new Error(body.error || ('submit failed (' + res.status + ')'));
 
     addHistory(env.jobId, labelText);
+    bumpJobsSubmitted(body.jobsSubmitted); // tick the pill up immediately (cached or not)
     msg.className = 'msg ok';
     if (body.status === 'done' && body.result) {
       msg.textContent = '✓ Answered instantly from the network result cache';
@@ -457,33 +458,47 @@ function renderHistory() {
 // --- network status pill ---
 function gb(b) { return (b == null) ? '?' : (b / 1e9).toFixed(1) + ' GB'; }
 
+var lastStatus = null; // most recent /api/status, so we can patch one field cheaply
+
+function renderPill(s) {
+  var el = $('netStatus');
+  el.classList.add('online');
+  // "job slots free" = how many jobs the whole fleet can run at once right now
+  // (sum of each worker's maxConcurrent minus what it's currently running).
+  var slots = s.fleetAvailableCapacity;
+  var cap = slots != null ? ' · ' + slots + ' job slot' + (slots === 1 ? '' : 's') + ' free' : '';
+  // registeredKeys counts registered public keys; we surface each as a client.
+  var clients = s.registeredKeys;
+  // total jobs ever submitted to the network — a running "score".
+  var jobs = s.jobsSubmitted;
+  el.textContent = s.workersOnline + ' worker node' + (s.workersOnline === 1 ? '' : 's') + ' online' + cap +
+    ' · ' + clients + ' registered client' + (clients === 1 ? '' : 's') +
+    (jobs != null ? ' · ' + jobs + ' job' + (jobs === 1 ? '' : 's') + ' submitted' : '');
+  // Hover/title shows each device's specs (CPU cores, free RAM/disk, capacity).
+  if (s.devices && s.devices.length) {
+    el.title = s.devices.map(function (d) {
+      var c = d.cpu || {};
+      return (d.hostname || d.peerId.slice(0, 8)) + ': ' + (c.cores || '?') + ' core ' + (c.arch || '') +
+        ', RAM ' + gb(d.ram && d.ram.freeBytes) + ' free, disk ' + gb(d.storage && d.storage.freeBytes) +
+        ' free, capacity ' + (d.availableCapacity != null ? d.availableCapacity : '?') + '/' + (d.maxConcurrent || '?');
+    }).join('\n');
+  } else {
+    el.title = '';
+  }
+}
+
+// Patch just the "jobs submitted" count from a job-submit response, so the pill
+// ticks up the instant you click submit — cached or not — without a round-trip.
+function bumpJobsSubmitted(total) {
+  if (total == null) return;
+  if (lastStatus) { lastStatus.jobsSubmitted = total; renderPill(lastStatus); }
+  else { refreshStatus(); }
+}
+
 async function refreshStatus() {
   try {
-    var s = await (await fetch('/api/status')).json();
-    var el = $('netStatus');
-    el.classList.add('online');
-    // "job slots free" = how many jobs the whole fleet can run at once right now
-    // (sum of each worker's maxConcurrent minus what it's currently running).
-    var slots = s.fleetAvailableCapacity;
-    var cap = slots != null ? ' · ' + slots + ' job slot' + (slots === 1 ? '' : 's') + ' free' : '';
-    // registeredKeys counts registered public keys; we surface each as a client.
-    var clients = s.registeredKeys;
-    // total jobs ever submitted to the network — a running "score".
-    var jobs = s.jobsSubmitted;
-    el.textContent = s.workersOnline + ' worker node' + (s.workersOnline === 1 ? '' : 's') + ' online' + cap +
-      ' · ' + clients + ' registered client' + (clients === 1 ? '' : 's') +
-      (jobs != null ? ' · ' + jobs + ' job' + (jobs === 1 ? '' : 's') + ' submitted' : '');
-    // Hover/title shows each device's specs (CPU cores, free RAM/disk, capacity).
-    if (s.devices && s.devices.length) {
-      el.title = s.devices.map(function (d) {
-        var c = d.cpu || {};
-        return (d.hostname || d.peerId.slice(0, 8)) + ': ' + (c.cores || '?') + ' core ' + (c.arch || '') +
-          ', RAM ' + gb(d.ram && d.ram.freeBytes) + ' free, disk ' + gb(d.storage && d.storage.freeBytes) +
-          ' free, capacity ' + (d.availableCapacity != null ? d.availableCapacity : '?') + '/' + (d.maxConcurrent || '?');
-      }).join('\n');
-    } else {
-      el.title = '';
-    }
+    lastStatus = await (await fetch('/api/status')).json();
+    renderPill(lastStatus);
   } catch (e) {
     $('netStatus').classList.remove('online');
     $('netStatus').textContent = 'Server unreachable';

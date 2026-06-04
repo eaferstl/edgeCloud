@@ -43,6 +43,9 @@ export async function runInference(prompt, manifest, timeoutMs) {
     } catch {
       /* non-JSON body → return as-is */
     }
+    // Strip a leading <think>…</think> reasoning block (some models, e.g. LFM,
+    // emit it inline even with thinking disabled) so the cached answer is clean.
+    content = content.replace(/^\s*<think>[\s\S]*?<\/think>\s*/i, '').trim();
     return { stdout: content, stderr: '', exitCode: 0, error: null, startedAt };
   } catch (e) {
     const msg = e.name === 'AbortError' ? `inference timed out after ${timeoutMs}ms` : e.message;

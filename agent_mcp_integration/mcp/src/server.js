@@ -23,15 +23,19 @@ const RUN_DESCRIPTION = [
  * configures it once (like their EdgeOS/Geo/Index Network MCP servers):
  *   EDGECLOUD_SERVER, EDGECLOUD_EMAIL, EDGECLOUD_KEYSTORE
  */
-export function createServer({ baseUrl, email, keystore } = {}) {
+export function createServer({ baseUrl, email, keystore, client: existingClient } = {}) {
   const server = new McpServer({ name: 'edgecloud', version: '0.1.0' });
 
-  // One client per process; the keystore handles key custody + session caching.
-  const client = new EdgeCloudClient({
-    baseUrl: baseUrl || process.env.EDGECLOUD_SERVER,
-    email: email || process.env.EDGECLOUD_EMAIL,
-    keystore: keystore || new Keystore(),
-  });
+  // Reuse a shared client when given one (HTTP mode binds many short-lived MCP
+  // sessions to a single client so the keystore + session-token cache persist).
+  // Otherwise build one per process (stdio mode).
+  const client =
+    existingClient ||
+    new EdgeCloudClient({
+      baseUrl: baseUrl || process.env.EDGECLOUD_SERVER,
+      email: email || process.env.EDGECLOUD_EMAIL,
+      keystore: keystore || new Keystore(),
+    });
 
   const ok = (obj) => ({
     content: [{ type: 'text', text: JSON.stringify(obj, null, 2) }],

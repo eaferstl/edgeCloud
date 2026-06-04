@@ -7,12 +7,14 @@
 //   EDGECLOUD_KEYSTORE optional path for the agent's key (default ~/.edgecloud/keys.json)
 //
 // Usage:
-//   edgecloud-mcp                 # start the MCP server over stdio (for the agent harness)
-//   edgecloud-mcp --self-test     # config + connectivity check, then exit
+//   edgecloud-mcp                      # MCP over stdio (Claude Desktop / generic clients)
+//   edgecloud-mcp --http [host:port]   # streamable-http on loopback (Hermes); default 127.0.0.1:8765
+//   edgecloud-mcp --self-test          # config + connectivity check, then exit
 //   edgecloud-mcp --version
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createServer } from './server.js';
+import { startHttpServer } from './http.js';
 
 const argv = process.argv.slice(2);
 
@@ -37,14 +39,31 @@ if (argv.includes('--self-test')) {
   }
 }
 
-// Default: serve over stdio (what Hermes / Claude Desktop launch).
-try {
-  const { server } = createServer();
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  // Log to stderr only — stdout is the MCP transport and must stay clean.
-  console.error('[edgecloud-mcp] ready (stdio)');
-} catch (e) {
-  console.error(`[edgecloud-mcp] failed to start: ${e.message}`);
-  process.exit(1);
+// --http [host:port]: streamable-http on loopback (the transport Hermes expects).
+const httpIdx = argv.indexOf('--http');
+if (httpIdx !== -1) {
+  try {
+    const spec = argv[httpIdx + 1] && !argv[httpIdx + 1].startsWith('--') ? argv[httpIdx + 1] : '';
+    const [host, port] = spec.includes(':') ? spec.split(':') : [spec || '127.0.0.1', undefined];
+    await startHttpServer({
+      host: host || '127.0.0.1',
+      port: port ? Number(port) : Number(process.env.EDGECLOUD_MCP_PORT) || 8765,
+    });
+    // Keep the process alive serving HTTP.
+  } catch (e) {
+    console.error(`[edgecloud-mcp] failed to start (http): ${e.message}`);
+    process.exit(1);
+  }
+} else {
+  // Default: serve over stdio (what Claude Desktop / generic MCP clients launch).
+  try {
+    const { server } = createServer();
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+    // Log to stderr only — stdout is the MCP transport and must stay clean.
+    console.error('[edgecloud-mcp] ready (stdio)');
+  } catch (e) {
+    console.error(`[edgecloud-mcp] failed to start: ${e.message}`);
+    process.exit(1);
+  }
 }

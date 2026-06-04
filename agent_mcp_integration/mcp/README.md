@@ -179,10 +179,24 @@ npm install
 EDGECLOUD_SERVER=http://146.190.123.91 EDGECLOUD_EMAIL=you@example.com \
   node agent_mcp_integration/mcp/src/index.js --self-test
 
-# start the MCP server over stdio (what an agent harness launches)
+# start the MCP server over stdio (Claude Desktop / generic MCP clients)
 EDGECLOUD_SERVER=http://146.190.123.91 EDGECLOUD_EMAIL=you@example.com \
   npm run agent-mcp
+
+# OR over loopback streamable-http (what Hermes connects to)
+EDGECLOUD_SERVER=http://146.190.123.91 EDGECLOUD_EMAIL=you@example.com \
+  node agent_mcp_integration/mcp/src/index.js --http 127.0.0.1:8765
 ```
+
+### Transports
+
+| Transport | Flag | Used by |
+|---|---|---|
+| stdio | (default) | Claude Desktop, generic MCP clients that launch a subprocess |
+| streamable-http (loopback) | `--http [host:port]` | Hermes (`mcp.servers` config) |
+
+The HTTP server binds to `127.0.0.1` by design — the agent's key stays local even
+though Hermes connects over HTTP (key custody, R-012).
 
 ### Claude Desktop / generic MCP client
 
@@ -203,8 +217,14 @@ EDGECLOUD_SERVER=http://146.190.123.91 EDGECLOUD_EMAIL=you@example.com \
 
 ### Hermes
 
-A thin skill wrapper (`hermes skills install edgecloud`) points Hermes at this same
-server. See [`../skill/`](../skill/) (TODO) for the package.
+Run the server in `--http` mode (above), then register it:
+
+```bash
+hermes config set mcp.servers.edgecloud \
+  '{"url":"http://127.0.0.1:8765/mcp","transport":"streamable-http"}'
+```
+
+The packaged skill (`SKILL.md` + `bootstrap.md`) lives in [`../skill/`](../skill/).
 
 ## Worker role (contribute compute)
 

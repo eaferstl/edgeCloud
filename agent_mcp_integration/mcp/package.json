@@ -18,6 +18,8 @@
   "scripts": {
     "start": "node src/index.js",
     "smoke": "node src/index.js --self-test",
+    "smoke:http": "node test/http-smoke.mjs",
+    "test:integration": "node test/integration.local.mjs",
     "test": "node --test"
   },
   "dependencies": {

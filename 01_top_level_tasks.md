@@ -111,7 +111,7 @@ Do not pre-fill completion. Team leads should update this during the build.
 | AGENT-002 | Fill out `agent_mcp_integration/spec.md` | Demo Ready | done (proposal) |
 | AGENT-003 | Assign owner + ratify module into `00_master_prd.md` | Not Started | Coordination/Keith |
 | AGENT-004 | Build `@edgecloud/agent-mcp` MCP server (submitter tools) | Integrated | built; local e2e test green (boots real server + 2 workers, all 8 checks). Pending live-server test with an attendee email |
-| AGENT-005 | Thin Hermes skill wrapper (`hermes skills install edgecloud`) | Not Started |  |
+| AGENT-005 | Thin Hermes skill wrapper (`hermes skills install edgecloud`) | Building | skill (`SKILL.md`+`bootstrap.md`) + loopback streamable-http transport built & smoke-tested; pending publish to Edge-City agentvillage skills repo |
 | AGENT-006 | Worker-enrollment helper + docs (≤25/email) | Not Started | reuses `worker/` Docker node |
 | AGENT-007 | Legal review of "your agent runs on the swarm" framing | Not Started | `legal/spec.md` |
 

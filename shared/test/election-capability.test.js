@@ -40,6 +40,13 @@ test('proximityCapability: prefers the lowest-latency claimant, hash breaks ties
   );
 });
 
+test('proximityCapability: MIXED (any unknown rtt) → pure hash, so old/new agree', () => {
+  const keys = ['kA', 'kB', 'kC'];
+  const rtt = { kA: 5, kB: null, kC: 9 }; // kB doesn't report latency (older worker)
+  // not all claimants have rtt → must reduce to min-hash (what an old worker computes)
+  assert.equal(proximityCapabilityElection(JID, 0, claimsFor(keys), { rttOf: (k) => rtt[k] }), hashWinner(keys));
+});
+
 test('electWinner uses the active (proximity-capability) strategy', () => {
   assert.equal(ACTIVE_ELECTION, 'proximity-capability');
   const keys = ['kA', 'kB', 'kC'];

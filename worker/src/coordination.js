@@ -53,6 +53,7 @@ export function createCoordinator({
   workerKey, // base64 Ed25519 public key — this worker's registered identity
   workerSecretKey, // base64 secret key for signing claims + results
   capabilities = { cores: 1, ramBytes: 0, gpu: false }, // what this worker can run
+  getRtt = () => null, // this worker's measured latency to the rendezvous (ms), or null
   maxConcurrent = 4,
   log = console.log,
   // --- injectable seam (defaults = production) ---
@@ -144,14 +145,22 @@ export function createCoordinator({
 
       // 5. claim rounds
       for (let round = 0; round < t.maxClaimRounds; round++) {
-        await store.addClaim(buildClaim(jid, workerKey, round, workerSecretKey));
+        const claim = buildClaim(jid, workerKey, round, workerSecretKey);
+        const myRtt = getRtt();
+        if (typeof myRtt === 'number') claim.rtt = myRtt; // advisory (unsigned): our proximity to the rendezvous
+        await store.addClaim(claim);
         await clock.sleep(t.claimSettleMs);
         if (await validResult(jid)) return;
 
         const claims = acceptedClaims(await store.readClaims());
         // Pluggable election (proximity + capability; capability already filtered
-        // at claim time). Deterministic across workers seeing the same claims.
-        const winner = electWinner(jid, round, claims);
+        // at claim time). Each claimant's rtt comes from its own claim, so all
+        // workers see the same data and agree on the winner.
+        const rttByKey = new Map();
+        for (const c of claims) {
+          if (c.jobId === jid && c.round === round && typeof c.rtt === 'number') rttByKey.set(c.workerKey, c.rtt);
+        }
+        const winner = electWinner(jid, round, claims, { rttOf: (k) => (rttByKey.has(k) ? rttByKey.get(k) : null) });
         if (winner === workerKey) {
           log(`[job ${short}] won claim round ${round} — executing (${manifest.type}: ${manifest.label || 'unlabeled'})`);
           await executeAndPublish(env, jid, short);

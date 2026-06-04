@@ -40,13 +40,19 @@ export function minHashElection(jobId, round, claims) {
  */
 export function proximityCapabilityElection(jobId, round, claims, ctx) {
   const rttOf = ctx && typeof ctx.rttOf === 'function' ? ctx.rttOf : () => null;
+  const here = claims.filter((c) => c.jobId === jobId && c.round === round);
+  // SAFE DEGRADATION on a mixed network: only order by proximity when EVERY
+  // claimant reported a latency. If any claimant's rtt is unknown (e.g. an older
+  // worker that doesn't measure latency), fall back to the pure hash tiebreak —
+  // which those workers also compute — so no two workers ever disagree on the
+  // winner. (Proximity therefore activates exactly when all claimants are
+  // latency-aware, e.g. the GPU workers competing for an inference job.)
+  const allHaveRtt = here.length > 0 && here.every((c) => typeof rttOf(c.workerKey) === 'number');
   let best = null;
   let bestRtt = Infinity;
   let bestRank = null;
-  for (const c of claims) {
-    if (c.jobId !== jobId || c.round !== round) continue;
-    const raw = rttOf(c.workerKey);
-    const rtt = typeof raw === 'number' && raw >= 0 ? raw : Infinity;
+  for (const c of here) {
+    const rtt = allHaveRtt ? rttOf(c.workerKey) : 0; // uniform when mixed ⇒ pure hash
     const r = rank(jobId, c.workerKey, round);
     if (best === null || rtt < bestRtt || (rtt === bestRtt && r < bestRank)) {
       best = c.workerKey;

@@ -661,8 +661,10 @@ function renderViz(s) {
     n.setAttribute('class', 'viz-node ' + statusCls + (n.classList.contains('pulsing') ? ' pulsing' : ''));
     n._nm.textContent = (d.peerId || '').slice(0, 8);
     n._ip.textContent = d.ip || '—';
-    n._px.textContent = (typeof d.rttMs === 'number') ? ('~' + Math.round(d.rttMs) + ' ms')
-      : (d.link === 'direct' ? 'direct · 1 hop' : d.link === 'relay' ? 'via relay · 2 hops' : '—');
+    var hops = d.link === 'direct' ? '1 hop' : d.link === 'relay' ? '2 hops' : null;
+    n._px.textContent = (typeof d.rttMs === 'number')
+      ? ('~' + Math.round(d.rttMs) + ' ms' + (hops ? ' · ' + hops : ''))
+      : (hops || '—');
   });
 
   // remove departed workers

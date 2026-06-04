@@ -81,6 +81,10 @@ export function makeQueries(db, sharedSalt) {
         .get(emailHmac, role === 'worker' ? 'worker' : 'user').c,
     isRegisteredKey: (pubkey) =>
       !!db.prepare('SELECT 1 FROM registered_keys WHERE pubkey = ?').get(pubkey),
+    // Is this key a registered WORKER (role='worker')? Used to refuse results
+    // from unregistered/old workers — a worker must register with its email.
+    isRegisteredWorkerKey: (pubkey) =>
+      !!db.prepare("SELECT 1 FROM registered_keys WHERE pubkey = ? AND role = 'worker'").get(pubkey),
     registeredKeyCount: () => db.prepare('SELECT COUNT(*) c FROM registered_keys').get().c,
 
     // --- job submitters index ---

@@ -30,14 +30,25 @@ export function createApp({ q, auth, databases, indexers, heartbeats, serverKey,
   // per-email Sybil caps: ≤4 user keys, ≤25 worker keys (THREAT_MODEL.md R-010).
   async function doRegister(req, res, { role, cap }) {
     const { email, pubkey } = req.body || {};
+    // Workers get an email-specific hint: they must set EDGECLOUD_EMAIL. This is
+    // what an old/anonymous worker hits the moment it tries to register.
+    const emailHint =
+      role === 'worker'
+        ? 'this worker is out of date: pull the latest Dockerfile and set EDGECLOUD_EMAIL to your Edge Esmeralda attendee email'
+        : 'invalid email';
     if (typeof email !== 'string' || !email.includes('@')) {
-      return res.status(400).json({ error: 'invalid email' });
+      return res.status(400).json({ error: emailHint });
     }
     if (!isValidPubkeyB64(pubkey)) {
       return res.status(400).json({ error: 'invalid public key' });
     }
     if (!q.emailAllowed(email)) {
-      return res.status(403).json({ error: 'email is not on the Edge Esmeralda attendee list' });
+      return res.status(403).json({
+        error:
+          role === 'worker'
+            ? 'EDGECLOUD_EMAIL is not on the Edge Esmeralda attendee list'
+            : 'email is not on the Edge Esmeralda attendee list',
+      });
     }
     const emailHmac = q.emailHmacOf(email);
     if (q.isRegisteredKey(pubkey)) {

@@ -40,6 +40,10 @@ export function createIndexers({ databases, q, genesisKey = GENESIS_SERVER_KEY, 
     // closes third-party result forgery (THREAT_MODEL.md R-003); a registered
     // worker signing a wrong answer is a separate, documented future problem.
     if (!doc || verifyResult(doc) !== null) return false;
+    // ...and the signer must be a REGISTERED worker (one that registered its key
+    // against an allowlisted email). This refuses output from old/anonymous
+    // workers that never specified their email (THREAT_MODEL.md R-010).
+    if (!q.isRegisteredWorkerKey(doc.executedBy)) return false;
     if (q.getCachedResult(doc.jobId)) return false; // first VALID result wins
     q.cacheResult(doc.jobId, JSON.stringify(doc));
     return true;

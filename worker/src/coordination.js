@@ -65,6 +65,12 @@ export function createCoordinator({
     pollMs: timings.pollMs ?? 1000,
   };
   const inFlight = new Set();
+  // Jobs this process has already executed AND published a result for. `inFlight`
+  // only guards a *concurrently* running job (it's cleared in finally), so the
+  // periodic scanBacklog could otherwise re-execute a job if a transient OrbitDB
+  // read (CBOR/sync latency) makes validResult momentarily return null and the
+  // worker re-wins round 0 uncontested. This set makes "already done here" sticky.
+  const published = new Set();
 
   const live = {
     status: 'available',
@@ -77,9 +83,14 @@ export function createCoordinator({
 
   // A result only "exists" if it's present AND validly signed by its executor —
   // so a forged (bad-sig) result can't make an honest worker skip execution.
+  // Short-circuit on jobs we ourselves already published, so a transient read
+  // failure can't trigger a duplicate execution.
   async function validResult(jobId) {
+    if (published.has(jobId)) return true;
     const r = await store.getResult(jobId);
-    return r && verifyResult(r) === null ? r : null;
+    if (!r) return null;
+    if (verifyResult(r) === null) return r;
+    return null; // present but unsigned/forged → ignore, keep executing
   }
 
   // Accept a claim only if it is well-formed + signed by workerKey AND that
@@ -160,6 +171,7 @@ export function createCoordinator({
       // result is SIGNED by this worker's identity key (executedBy = workerKey)
       const result = buildResult({ ...r, jobId: jid, executedBy: workerKey, secretKeyB64: workerSecretKey });
       await store.putResult(jid, result);
+      published.add(jid); // sticky: never re-execute this job in this process
       log(`[job ${short}] result published (exit ${result.exitCode}, ${result.stdout.length}B stdout)`);
     } finally {
       live.currentLoad = Math.max(0, live.currentLoad - 1);

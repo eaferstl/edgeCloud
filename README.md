@@ -48,13 +48,18 @@ queue, and starts claiming jobs.
 
 ```bash
 git clone <this repo> && cd edgeCloud/worker
-export EDGECLOUD_EMAIL=you@example.com   # your Edge Esmeralda attendee email (required)
+export EDGECLOUD_EMAIL=you@example.com   # your Edge Esmeralda attendee email (REQUIRED)
 docker compose up --build -d          # needs CAP_NET_ADMIN (compose sets it)
 docker compose logs -f                # expect: "worker identity key registered" + "connected to rendezvous …"
 ```
 
-It will appear at http://146.190.123.91/api/status (`workersOnline`, with its CPU/RAM/disk
-and free job slots). Point it at a different server with
+> **Already running a worker from before this change?** It must be upgraded — the
+> server now rejects unsigned/unregistered output and the worker refuses to start
+> without an email. **Pull the latest Dockerfile and set `EDGECLOUD_EMAIL`**, then
+> rebuild: `git pull && cd worker && EDGECLOUD_EMAIL=you@example.com docker compose up --build -d`.
+
+It will appear at http://146.190.123.91/api/status (`workersOnline`, identified by its
+**public key**, with its CPU/RAM/disk and free job slots). Point it at a different server with
 `-e RENDEZVOUS_MULTIADDR=/ip4/<host>/tcp/4002/ws/p2p/<peerId>`. The container blocks egress
 to private IPs so submitted code can't reach your LAN.
 

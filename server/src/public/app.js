@@ -48,6 +48,40 @@ function canonicalJson(value) {
   return '{' + parts.join(',') + '}';
 }
 
+// Is this a plausible base64 Ed25519 public key? (mirrors shared/src/crypto.js)
+function isValidPubkeyB64(s) {
+  if (typeof s !== 'string' || s.length > 64) return false;
+  try { return bytesFromB64(s).length === nacl.sign.publicKeyLength; } catch (e) { return false; }
+}
+
+// Verify a result is cryptographically SIGNED by the worker that produced it —
+// the browser independently checks integrity and does NOT trust the server to
+// have done so. Mirrors shared/src/result.js verifyResult: the signature is over
+// the canonical JSON of the result EXCLUDING its own `sig` and the OrbitDB `_id`,
+// by the Ed25519 key named in `executedBy`. Returns null if valid, else why.
+function verifyResultSig(result) {
+  if (!result || typeof result !== 'object') return 'no result';
+  if (!isValidPubkeyB64(result.executedBy)) return 'not attributed to a valid worker key';
+  if (typeof result.sig !== 'string' || !result.sig) return 'result is not signed';
+  var rest = {};
+  for (var k in result) {
+    if (!Object.prototype.hasOwnProperty.call(result, k)) continue;
+    if (k === 'sig' || k === '_id') continue;
+    rest[k] = result[k];
+  }
+  try {
+    var pub = bytesFromB64(result.executedBy);
+    var sig = bytesFromB64(result.sig);
+    if (pub.length !== nacl.sign.publicKeyLength || sig.length !== nacl.sign.signatureLength) {
+      return 'malformed key or signature';
+    }
+    var ok = nacl.sign.detached.verify(utf8Bytes(canonicalJson(rest)), sig, pub);
+    return ok ? null : 'signature does not verify';
+  } catch (e) {
+    return 'malformed signature';
+  }
+}
+
 // --- identity ---
 function loadIdentity() {
   try { return JSON.parse(localStorage.getItem(LS_IDENTITY)); } catch (e) { return null; }
@@ -352,6 +386,17 @@ async function fetchResultAuthed(jobId) {
 }
 
 function renderResult(jobId, result, fromCache) {
+  // INTEGRITY GATE: only display a result that is cryptographically signed by a
+  // valid worker key. We verify in the browser rather than trusting the server.
+  var sigErr = verifyResultSig(result);
+  if (sigErr) {
+    $('resultStatus').className = 'msg err';
+    $('resultStatus').textContent = '✗ Refusing to display — result is not signed by a valid worker (' + sigErr + ')';
+    $('resultOut').hidden = true;
+    $('resultErr').hidden = true;
+    $('resultMeta').hidden = true;
+    return;
+  }
   $('resultStatus').className = 'msg ok';
   $('resultStatus').textContent = result.ok
     ? (fromCache ? '✓ Done (cached — this exact job ran before)' : '✓ Done')
@@ -367,7 +412,7 @@ function renderResult(jobId, result, fromCache) {
   $('resultMeta').textContent =
     'executed by ' + (result.executedBy || 'unknown') +
     (result.startedAt && result.timestamp ? ' in ' + (result.timestamp - result.startedAt) + ' ms' : '') +
-    ' · exit ' + result.exitCode;
+    ' · exit ' + result.exitCode + ' · 🔏 signature verified';
   $('resultMeta').hidden = false;
 }
 

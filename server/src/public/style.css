@@ -95,6 +95,7 @@ form { display: flex; flex-direction: column; gap: 0.2rem; }
 /* Break at word boundaries; only break *inside* a token (e.g. a long base64
    pubkey) when it can't fit on its own line — never mid-word for normal prose. */
 .small { font-size: 0.8rem; color: var(--muted); overflow-wrap: break-word; word-break: normal; }
+#whoami a { color: #fff; text-decoration: underline; }
 
 pre {
   background: #0b0e13;

@@ -7,6 +7,13 @@
 //
 // Results are idempotent by jobId (documents DB keyed by _id = jobId), so the
 // rare double-execution under partition collapses to one logical result.
+//
+// TESTABILITY: the claim logic depends only on an injected { store, clock,
+// executeJob } seam. In production those default to the OrbitDB databases, the
+// real wall clock, and the real executor — so callers pass nothing extra. A
+// deterministic simulation (worker/test/coordination-sim.test.js) injects an
+// in-memory partition-aware store + virtual clock to exercise races, partitions,
+// dead winners, and takeover against THIS exact code (not a reimplementation).
 
 import { verifyEnvelope } from '@edgecloud/shared/envelope.js';
 import { buildClaim, validateClaim, claimWinner } from '@edgecloud/shared/claims.js';
@@ -19,18 +26,44 @@ import {
   MAX_CLAIM_ROUNDS,
   MAX_JOB_TIMEOUT_MS,
 } from '@edgecloud/shared/constants.js';
-import { executeJob } from './executor/run.js';
+import { executeJob as realExecuteJob } from './executor/run.js';
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const realSleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export function createCoordinator({ databases, registry, peerId, maxConcurrent = 4, log = console.log }) {
+/** Production store adapter over the OrbitDB databases. */
+export function makeOrbitStore(databases) {
+  return {
+    addClaim: (claim) => databases.claims.add(claim),
+    readClaims: () => allEventValues(databases.claims),
+    getResult: (jobId) => getResultDoc(databases.results, jobId),
+    putResult: (jobId, result) => databases.results.put({ _id: jobId, ...result }),
+  };
+}
+
+export function createCoordinator({
+  databases,
+  registry,
+  peerId,
+  maxConcurrent = 4,
+  log = console.log,
+  // --- injectable seam (defaults = production) ---
+  store = databases ? makeOrbitStore(databases) : null,
+  clock = { now: () => Date.now(), sleep: realSleep },
+  executeJob = realExecuteJob,
+  timings = {},
+} = {}) {
+  const t = {
+    claimSettleMs: timings.claimSettleMs ?? CLAIM_SETTLE_MS,
+    resultMarginMs: timings.resultMarginMs ?? RESULT_MARGIN_MS,
+    maxClaimRounds: timings.maxClaimRounds ?? MAX_CLAIM_ROUNDS,
+    pollMs: timings.pollMs ?? 1000,
+  };
   const inFlight = new Set();
 
   // Live scheduling state, published in each heartbeat (device schema D-A,
-  // from chaodoze's registry). Unlike his placeholder, currentLoad here tracks
-  // ACTUAL running executions: bumped in executeAndPublish, restored on finish.
+  // from chaodoze's registry). currentLoad tracks ACTUAL running executions.
   const live = {
-    status: 'available', // "available" | "draining" | "offline"
+    status: 'available',
     maxConcurrent,
     currentLoad: 0,
     get availableCapacity() {
@@ -57,7 +90,7 @@ export function createCoordinator({ databases, registry, peerId, maxConcurrent =
         return;
       }
       // 3. replay/cache: existing result wins
-      if (await getResultDoc(databases.results, jid)) {
+      if (await store.getResult(jid)) {
         log(`[job ${short}] already has a result; nothing to do`);
         return;
       }
@@ -72,14 +105,12 @@ export function createCoordinator({ databases, registry, peerId, maxConcurrent =
       const jobTimeout = Math.min(manifest.timeoutMs, MAX_JOB_TIMEOUT_MS);
 
       // 4. claim rounds
-      for (let round = 0; round < MAX_CLAIM_ROUNDS; round++) {
-        await databases.claims.add(buildClaim(jid, peerId, round));
-        await sleep(CLAIM_SETTLE_MS);
-        if (await getResultDoc(databases.results, jid)) return;
+      for (let round = 0; round < t.maxClaimRounds; round++) {
+        await store.addClaim(buildClaim(jid, peerId, round));
+        await clock.sleep(t.claimSettleMs);
+        if (await store.getResult(jid)) return;
 
-        const claims = (await allEventValues(databases.claims)).filter(
-          (c) => validateClaim(c) === null
-        );
+        const claims = (await store.readClaims()).filter((c) => validateClaim(c) === null);
         const winner = claimWinner(jid, round, claims);
         if (winner === peerId) {
           log(`[job ${short}] won claim round ${round} — executing (${manifest.type}: ${manifest.label || 'unlabeled'})`);
@@ -87,14 +118,14 @@ export function createCoordinator({ databases, registry, peerId, maxConcurrent =
           return;
         }
         log(`[job ${short}] round ${round} winner is ${winner?.slice(-8)} — standing by`);
-        const deadline = Date.now() + jobTimeout + RESULT_MARGIN_MS;
-        while (Date.now() < deadline) {
-          await sleep(1000);
-          if (await getResultDoc(databases.results, jid)) return;
+        const deadline = clock.now() + jobTimeout + t.resultMarginMs;
+        while (clock.now() < deadline) {
+          await clock.sleep(t.pollMs);
+          if (await store.getResult(jid)) return;
         }
         log(`[job ${short}] no result from round-${round} winner; taking over (round ${round + 1})`);
       }
-      log(`[job ${short}] giving up after ${MAX_CLAIM_ROUNDS} rounds`);
+      log(`[job ${short}] giving up after ${t.maxClaimRounds} rounds`);
     } catch (e) {
       log(`[job ${short}] error: ${e.message}`);
     } finally {
@@ -107,12 +138,12 @@ export function createCoordinator({ databases, registry, peerId, maxConcurrent =
     try {
       const r = await executeJob(env);
       // last-moment dedup: someone may have raced us
-      if (await getResultDoc(databases.results, jid)) {
+      if (await store.getResult(jid)) {
         log(`[job ${short}] executed but a result already replicated; discarding duplicate`);
         return;
       }
       const result = buildResult({ ...r, jobId: jid, executedBy: peerId });
-      await databases.results.put({ _id: jid, ...result });
+      await store.putResult(jid, result);
       log(`[job ${short}] result published (exit ${result.exitCode}, ${result.stdout.length}B stdout)`);
     } finally {
       live.currentLoad = Math.max(0, live.currentLoad - 1);

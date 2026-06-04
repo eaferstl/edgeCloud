@@ -37,6 +37,24 @@ zip/hash/sign steps. Asserts the browser-built envelope is deterministic and
 **verifies with the shared server/worker code**, and that browser-signed challenges
 verify server-side. ✅
 
+### T-Sim — coordinator race/partition simulation
+`worker/test/coordination-sim.test.js` drives the **real** coordinator
+(`worker/src/coordination.js`, via its injected store/clock/executor seam) through a
+**virtual clock** + **partition-aware in-memory store**. Asserts: no-partition →
+exactly one execution + deterministic winner; run-to-run determinism; a pre-existing
+result → nobody executes (dedup); a **dead round-0 winner → a later round takes over**
+(liveness, bounded executions); a **network partition → bounded duplicate execution
+(≤ #partitions), converges after heal**; a partition with one dead side → the live
+side still serves it. ✅ (6 scenarios)
+
+### T-E2E-Local — local 1-server + 2-worker end-to-end harness
+`scripts/e2e-local.mjs` (`npm run e2e:local`) boots a real server + two real workers
+as processes (temp dirs, unique ports, the server's own key as genesis) and runs the
+full HTTP + libp2p + OrbitDB path: baseline happy path; duplicate → cache hit;
+two identical concurrent submissions → one result; stranger result fetch → 403;
+**kill the claim winner mid-job → the survivor takes over and produces the result**.
+✅ (all scenarios)
+
 ### T-Trust — trust chain unit tests
 `shared/test/trust.test.js`: genesis→B→C transitive trust; forged-signature
 endorsements ignored; attestations only honored from trusted servers; claim winner
@@ -180,9 +198,12 @@ Confirms the hardening did not break legitimate compute.
 - **Result spoofing** (THREAT_MODEL R-003): results are unsigned; we did not test
   defense because there is none — a fast attacker can write a wrong result for a
   jobId. Documented, accepted.
-- **Partition double-execution** (L6): we tested takeover and dedupe, not a true
-  network partition with two simultaneous executors. The design *tolerates* it; the
-  coordinator partition-simulation harness is planned but not yet implemented.
+- **Partition double-execution** (L6): now covered deterministically by the
+  coordinator partition simulation (§T-Sim) — including two partitions each electing
+  a winner — which asserts the duplication is *bounded* (≤ #partitions) and converges
+  after heal. What remains untested is a *real* multi-host libp2p partition under
+  packet loss (intentionally out of CI scope; the simulation drives the real
+  coordinator code and is faster + deterministic).
 - **Kernel/Docker/wasmtime/Node 0-day escape** (R-006): out of scope; mitigated by
   defense-in-depth and the optional gVisor runtime, not eliminated.
 - **MITM on plain HTTP** (R-002): no TLS; not tested because it is a known accepted

@@ -14,6 +14,7 @@
   },
   "scripts": {
     "test": "npm run test --workspaces --if-present",
+    "e2e:local": "node scripts/e2e-local.mjs",
     "server": "npm run start --workspace @edgecloud/server",
     "worker": "npm run start --workspace @edgecloud/worker",
     "check:device-registry": "node --check device_registry/index.js"

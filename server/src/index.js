@@ -13,6 +13,7 @@ import { createOrbitNode } from './orbit-node.js';
 import { createIndexers } from './indexers.js';
 import { createAuth } from './auth.js';
 import { watchHeartbeats } from './heartbeats.js';
+import { createSSE } from './sse.js';
 import { createApp } from './http/app.js';
 import { createEndorsement } from '@edgecloud/shared/trust.js';
 import { allEventValues } from '@edgecloud/shared/orbit.js';
@@ -48,7 +49,41 @@ async function main() {
     console.log(`[boot] db ${name}: ${d.address.toString()}`);
   }
 
-  const indexers = createIndexers({ databases, q });
+  // Live push (SSE) for the execution map. buildStatus closes over `heartbeats`,
+  // which is assigned below — only ever CALLED after boot, so the order is fine.
+  const sse = createSSE();
+  let heartbeats;
+  const buildStatus = () => ({
+    workersOnline: heartbeats.count(),
+    workers: heartbeats.online(),
+    devices: heartbeats.devices(), // capability records (cpu/ram/storage/capacity/ip)
+    fleetAvailableCapacity: heartbeats.totalAvailableCapacity(),
+    registeredKeys: q.registeredKeyCount(),
+    jobsSubmitted: q.submissionCount(),
+    allowlistedEmails: q.allowlistCount(),
+    cachedResults: q.cachedResultCount(),
+    trustedServers: indexers.state.trustedServers.size,
+    recentExecutions: q.recentResults(24),
+  });
+  // Coalesce status pushes to ≤ ~1/sec (heartbeats are chatty); executions push
+  // immediately for a snappy animation.
+  let statusTimer = null;
+  const pushStatus = () => {
+    if (statusTimer) return;
+    statusTimer = setTimeout(() => {
+      statusTimer = null;
+      sse.broadcast('status', buildStatus());
+    }, 800);
+  };
+
+  const indexers = createIndexers({
+    databases,
+    q,
+    onResultCached: (e) => {
+      sse.broadcast('execution', e); // who ran what, the instant it's cached
+      pushStatus(); // load/cachedResults changed
+    },
+  });
   await indexers.fullRescan();
   indexers.follow();
   // Seed the "jobs submitted" tally once with the distinct-job baseline so it
@@ -60,8 +95,8 @@ async function main() {
   await maybeSelfAdvertise({ databases, indexers, serverKey });
 
   const auth = createAuth();
-  const heartbeats = watchHeartbeats(libp2p);
-  const app = createApp({ q, auth, databases, indexers, heartbeats, serverKey, libp2p, config });
+  heartbeats = watchHeartbeats(libp2p, console.log, pushStatus);
+  const app = createApp({ q, auth, databases, indexers, heartbeats, serverKey, libp2p, config, sse, buildStatus });
 
   const httpServer = app.listen(config.httpPort, () => {
     console.log(`[boot] HTTP listening on :${config.httpPort}`);

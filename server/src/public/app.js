@@ -271,6 +271,7 @@ function buildEnvelope(zipB64, identity) {
 
 // --- submission + result polling ---
 var pollTimer = null;
+var awaiting = null; // { jobId, done, deliver } — the result this page is waiting on
 
 $('submitBtn').addEventListener('click', async function () {
   var identity = loadIdentity();
@@ -348,18 +349,29 @@ function showResultCard(jobId) {
   $('resultCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
+// Wait for a job's result. Primary path is EVENTED: the SSE 'execution' event
+// for this jobId triggers `deliver()` the instant it's cached (handleExecution).
+// A slow status poll stays as a fallback in case SSE is unavailable/missed.
 function pollForResult(jobId) {
   if (pollTimer) clearInterval(pollTimer);
   var started = Date.now();
-  pollTimer = setInterval(async function () {
+  var deliver = async function () {
+    if (!awaiting || awaiting.jobId !== jobId || awaiting.done) return;
+    awaiting.done = true;
+    if (pollTimer) clearInterval(pollTimer);
     try {
-      var res = await fetch('/api/jobs/' + jobId + '/status');
-      var body = await res.json();
-      if (body.status === 'done') {
-        clearInterval(pollTimer);
-        var result = await fetchResultAuthed(jobId);
-        renderResult(jobId, result, false);
-      } else if (Date.now() - started > 120000) {
+      renderResult(jobId, await fetchResultAuthed(jobId), false);
+    } catch (e) {
+      awaiting.done = false; // let the poll retry
+    }
+  };
+  awaiting = { jobId: jobId, done: false, deliver: deliver };
+  pollTimer = setInterval(async function () {
+    if (!awaiting || awaiting.done) { clearInterval(pollTimer); return; }
+    try {
+      var body = await (await fetch('/api/jobs/' + jobId + '/status')).json();
+      if (body.status === 'done') deliver();
+      else if (Date.now() - started > 120000) {
         clearInterval(pollTimer);
         $('resultStatus').className = 'msg err';
         $('resultStatus').textContent = 'No result after 2 minutes — are any worker nodes online?';
@@ -601,21 +613,22 @@ function renderViz(s) {
     }
   });
 
-  animateExecutions(s.recentExecutions || []);
 }
 
-function animateExecutions(execs) {
-  if (!VIZ.seeded) { execs.forEach(function (e) { VIZ.seen.add(e.jobId); }); VIZ.seeded = true; return; }
-  // newest-first → walk oldest-first so a burst animates in order
-  for (var i = execs.length - 1; i >= 0; i--) {
-    var e = execs[i];
-    if (VIZ.seen.has(e.jobId)) continue;
-    VIZ.seen.add(e.jobId);
-    if (e.ts && e.ts > Date.now() - 45000 && e.executedBy && VIZ.pos[e.executedBy]) {
-      flyPacket(VIZ.pos[e.executedBy]);
-      pulseNode(e.executedBy);
-    }
-  }
+// Seed VIZ.seen from a status snapshot's history so a reconnect backlog isn't
+// re-animated. Live executions are animated by handleExecution (from the SSE
+// 'execution' event, or the polling fallback's diff).
+function processExecutions(execs) {
+  (execs || []).forEach(function (e) { if (e && e.jobId) VIZ.seen.add(e.jobId); });
+}
+
+function handleExecution(e) {
+  if (!e || !e.jobId || VIZ.seen.has(e.jobId)) return;
+  VIZ.seen.add(e.jobId);
+  // a job this browser is waiting on just finished → fetch its result NOW (evented)
+  if (awaiting && awaiting.jobId === e.jobId && awaiting.deliver) awaiting.deliver();
+  if (e.ts && e.ts < Date.now() - 60000) return; // stale backlog → don't animate
+  if (e.executedBy && VIZ.pos[e.executedBy]) { flyPacket(VIZ.pos[e.executedBy]); pulseNode(e.executedBy); }
 }
 
 function flyPacket(to) {
@@ -638,8 +651,37 @@ function pulseNode(peerId) {
   setTimeout(function () { n.classList.remove('pulsing'); }, 950);
 }
 
+// Live updates: prefer SSE push (executions arrive the instant they happen);
+// fall back to polling only if EventSource is unavailable.
+function startLiveFeed() {
+  if (typeof EventSource === 'undefined') { startPolling(); return; }
+  var es;
+  try { es = new EventSource('/api/events'); } catch (e) { startPolling(); return; }
+  var seeded = false;
+  es.addEventListener('status', function (ev) {
+    var s; try { s = JSON.parse(ev.data); } catch (x) { return; }
+    lastStatus = s; renderPill(s); renderViz(s);
+    if (!seeded) { processExecutions(s.recentExecutions); seeded = true; } // don't replay history
+  });
+  es.addEventListener('execution', function (ev) {
+    try { handleExecution(JSON.parse(ev.data)); } catch (x) {}
+  });
+  es.onerror = function () { $('netStatus').classList.remove('online'); }; // EventSource auto-reconnects
+}
+function startPolling() {
+  var first = true;
+  var tick = function () {
+    refreshStatus().then(function () {
+      if (!lastStatus) return;
+      if (first) { processExecutions(lastStatus.recentExecutions); first = false; }
+      else { var ex = lastStatus.recentExecutions || []; for (var i = ex.length - 1; i >= 0; i--) handleExecution(ex[i]); }
+    });
+  };
+  tick();
+  setInterval(tick, 3000);
+}
+
 renderIdentity();
 renderHistory();
 populateExamples();
-refreshStatus();
-setInterval(refreshStatus, 3000); // brisk poll so the live map feels real-time
+startLiveFeed();

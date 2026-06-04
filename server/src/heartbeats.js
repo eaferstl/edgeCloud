@@ -8,7 +8,7 @@
 
 import { TOPIC_HEARTBEAT, HEARTBEAT_EVICT_MS } from '@edgecloud/shared/constants.js';
 
-export function watchHeartbeats(libp2p, log = console.log) {
+export function watchHeartbeats(libp2p, log = console.log, onChange = () => {}) {
   const devices = new Map(); // peerId -> { record, lastSeen }
 
   libp2p.services.pubsub.subscribe(TOPIC_HEARTBEAT);
@@ -21,6 +21,7 @@ export function watchHeartbeats(libp2p, log = console.log) {
       if (typeof peerId !== 'string' || peerId.length === 0 || peerId.length > 128) return;
       if (!devices.has(peerId)) log(`[heartbeat] worker online: ${peerId}`);
       devices.set(peerId, { record: rec, lastSeen: Date.now() });
+      onChange(); // each heartbeat may change load/capacity → push a fresh snapshot
     } catch {
       /* ignore malformed heartbeats */
     }
@@ -32,6 +33,7 @@ export function watchHeartbeats(libp2p, log = console.log) {
       if (d.lastSeen < cutoff) {
         devices.delete(id);
         log(`[heartbeat] worker offline: ${id}`);
+        onChange();
       }
     }
   }, 5000).unref();

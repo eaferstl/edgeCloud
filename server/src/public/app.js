@@ -415,9 +415,14 @@ async function refreshStatus() {
     var s = await (await fetch('/api/status')).json();
     var el = $('netStatus');
     el.classList.add('online');
-    var cap = s.fleetAvailableCapacity != null ? ' · ' + s.fleetAvailableCapacity + ' free slots' : '';
+    // "job slots free" = how many jobs the whole fleet can run at once right now
+    // (sum of each worker's maxConcurrent minus what it's currently running).
+    var slots = s.fleetAvailableCapacity;
+    var cap = slots != null ? ' · ' + slots + ' job slot' + (slots === 1 ? '' : 's') + ' free' : '';
+    // registeredKeys counts registered public keys; we surface each as a client.
+    var clients = s.registeredKeys;
     el.textContent = s.workersOnline + ' worker node' + (s.workersOnline === 1 ? '' : 's') + ' online' + cap +
-      ' · ' + s.registeredKeys + ' keys';
+      ' · ' + clients + ' registered client' + (clients === 1 ? '' : 's');
     // Hover/title shows each device's specs (CPU cores, free RAM/disk, capacity).
     if (s.devices && s.devices.length) {
       el.title = s.devices.map(function (d) {

@@ -32,6 +32,8 @@ function bytesFromB64(b64) {
   return out;
 }
 function utf8Bytes(s) { return new TextEncoder().encode(s); }
+// Capitalize the first letter of a user-facing message (server errors included).
+function cap(s) { return (typeof s === 'string' && s.length) ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
 
 // canonical JSON — must match shared/src/canonical.js byte-for-byte
 function canonicalJson(value) {
@@ -67,7 +69,7 @@ $('registerForm').addEventListener('submit', async function (e) {
   var email = $('emailInput').value.trim().toLowerCase();
   var msg = $('registerMsg');
   msg.className = 'msg';
-  msg.textContent = 'creating key & registering…';
+  msg.textContent = 'Creating key & registering…';
   $('registerBtn').disabled = true;
   try {
     var kp = nacl.sign.keyPair();
@@ -90,7 +92,7 @@ $('registerForm').addEventListener('submit', async function (e) {
     renderIdentity();
   } catch (err) {
     msg.className = 'msg err';
-    msg.textContent = err.message;
+    msg.textContent = cap(err.message);
   } finally {
     $('registerBtn').disabled = false;
   }
@@ -242,11 +244,11 @@ $('submitBtn').addEventListener('click', async function () {
   msg.className = 'msg';
   if (!identity) {
     msg.className = 'msg err';
-    msg.textContent = 'register your email first (step 1)';
+    msg.textContent = 'Register your email first (step 1)';
     return;
   }
   $('submitBtn').disabled = true;
-  msg.textContent = 'building & signing job…';
+  msg.textContent = 'Building & signing job…';
   try {
     var sel = selectedExample();
     var manifest, entryBytes, labelText;
@@ -272,7 +274,7 @@ $('submitBtn').addEventListener('click', async function () {
     var zipB64 = buildZipB64(manifest, entryBytes);
     var env = buildEnvelope(zipB64, identity);
 
-    msg.textContent = 'submitting to the network…';
+    msg.textContent = 'Submitting to the network…';
     var res = await fetch('/api/jobs', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -284,17 +286,17 @@ $('submitBtn').addEventListener('click', async function () {
     addHistory(env.jobId, labelText);
     msg.className = 'msg ok';
     if (body.status === 'done' && body.result) {
-      msg.textContent = '✓ answered instantly from the network result cache';
+      msg.textContent = '✓ Answered instantly from the network result cache';
       showResultCard(env.jobId);
       renderResult(env.jobId, body.result, true);
     } else {
-      msg.textContent = '✓ job queued — waiting for a volunteer node…';
+      msg.textContent = '✓ Job queued — waiting for a volunteer node…';
       showResultCard(env.jobId);
       pollForResult(env.jobId);
     }
   } catch (err) {
     msg.className = 'msg err';
-    msg.textContent = err.message;
+    msg.textContent = cap(err.message);
   } finally {
     $('submitBtn').disabled = false;
   }
@@ -304,7 +306,7 @@ function showResultCard(jobId) {
   $('resultCard').hidden = false;
   $('resultJobId').textContent = jobId.slice(0, 16) + '…';
   $('resultStatus').className = 'msg';
-  $('resultStatus').textContent = '⏳ waiting for the network…';
+  $('resultStatus').textContent = '⏳ Waiting for the network…';
   $('resultOut').hidden = true;
   $('resultErr').hidden = true;
   $('resultMeta').hidden = true;
@@ -325,7 +327,7 @@ function pollForResult(jobId) {
       } else if (Date.now() - started > 120000) {
         clearInterval(pollTimer);
         $('resultStatus').className = 'msg err';
-        $('resultStatus').textContent = 'no result after 2 minutes — are any worker nodes online?';
+        $('resultStatus').textContent = 'No result after 2 minutes — are any worker nodes online?';
       }
     } catch (e) { /* transient; keep polling */ }
   }, 1500);
@@ -352,8 +354,8 @@ async function fetchResultAuthed(jobId) {
 function renderResult(jobId, result, fromCache) {
   $('resultStatus').className = 'msg ok';
   $('resultStatus').textContent = result.ok
-    ? (fromCache ? '✓ done (cached — this exact job ran before)' : '✓ done')
-    : '✗ job failed' + (result.error ? ' (' + result.error + ')' : '');
+    ? (fromCache ? '✓ Done (cached — this exact job ran before)' : '✓ Done')
+    : '✗ Job failed' + (result.error ? ' (' + result.error + ')' : '');
   if (result.stdout) {
     $('resultOut').textContent = result.stdout;
     $('resultOut').hidden = false;
@@ -398,7 +400,7 @@ function renderHistory() {
         renderResult(item.jobId, result, true);
       } catch (e) {
         $('resultStatus').className = 'msg err';
-        $('resultStatus').textContent = e.message;
+        $('resultStatus').textContent = cap(e.message);
       }
     });
     li.appendChild(label);
@@ -436,7 +438,7 @@ async function refreshStatus() {
     }
   } catch (e) {
     $('netStatus').classList.remove('online');
-    $('netStatus').textContent = 'server unreachable';
+    $('netStatus').textContent = 'Server unreachable';
     $('netStatus').title = '';
   }
 }

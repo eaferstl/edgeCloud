@@ -2,19 +2,50 @@
 #
 #   cd worker && docker compose up --build -d
 #
-# NET_ADMIN is required so the container can install its OWN egress firewall
-# (blocking submitted code from reaching private networks / your LAN).
-# The worker keeps its identity (libp2p peerId) in the worker_data volume.
+# The container runs ARBITRARY submitted code, so it is locked down hard. The
+# worker supervisor runs as root but with only a 5-capability allow-list and
+# no-new-privileges; it drops every individual job to an unprivileged uid
+# (10002) that has NO access to /data (the worker's keys) and NO network. See
+# worker/entrypoint.sh and worker/src/executor/. Hardening summary in
+# ARCHITECTURE.md ("Worker sandboxing").
 
 services:
   worker:
     build:
       context: ..
       dockerfile: worker/Dockerfile
+    # Minimal capability set. Drop everything, add back only what startup needs:
+    #   NET_ADMIN — install the iptables egress firewall
+    #   CHOWN     — take ownership of /data (root has no DAC_OVERRIDE here)
+    #   SETUID/SETGID — drop each job to the sandbox uid via setpriv
+    #   KILL      — kill a timed-out job's process group (different uid)
+    cap_drop:
+      - ALL
     cap_add:
       - NET_ADMIN
+      - CHOWN
+      - SETUID
+      - SETGID
+      - KILL
+    security_opt:
+      - no-new-privileges:true   # no setuid-binary privilege escalation
+      # Docker's default seccomp profile stays enforced (do NOT set unconfined).
+    read_only: true              # immutable root filesystem
+    tmpfs:
+      # Job scratch + any temp live here. exec is required (the job's `node` /
+      # `wasmtime` read code from scratch); nosuid/nodev keep it hostile.
+      - /tmp:rw,exec,nosuid,nodev,size=128m,mode=1777
+      - /run:rw,noexec,nosuid,nodev,size=8m
+    pids_limit: 256              # fork-bomb backstop
+    cpus: "1.5"
+    mem_limit: 768m
+    memswap_limit: 768m          # == mem_limit ⇒ no swap
+    ulimits:
+      nofile: 1024
+      nproc: 256
+      core: 0
     environment:
-      # Rendezvous server (genesis defaults are baked in; override here)
+      # Rendezvous defaults are baked into shared/src/constants.js; override here.
       # RENDEZVOUS_MULTIADDR: "/ip4/146.190.123.91/tcp/4002/ws/p2p/<SERVER_PEER_ID>"
       # EDGECLOUD_HTTP_FALLBACK: "http://146.190.123.91"
       # Local-testing escape hatches (do NOT use in production):
@@ -22,8 +53,13 @@ services:
       # EDGECLOUD_FIREWALL_ALLOW: "192.168.1.50/32"
       EDGECLOUD_DATA: /data
     volumes:
-      - worker_data:/data
+      - worker_data:/data        # persistent libp2p peerId + OrbitDB state (root-owned, 700)
     restart: unless-stopped
+
+    # PARANOID OPTION (stronger kernel isolation; requires gVisor installed):
+    #   runtime: runsc
+    # Note: iptables/NET_ADMIN behave differently under gVisor — the per-uid
+    # egress rule may need adjusting. Left off by default for the demo.
 
 volumes:
   worker_data:

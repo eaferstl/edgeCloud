@@ -154,15 +154,41 @@ are caught, never fatal — `shared/src/orbit.js`).
 
 ## Worker sandboxing
 
-The Docker container is the trust boundary; submitted code gets generous in-container
-permissions. `worker/entrypoint.sh` installs an **iptables egress firewall**
-(requires `--cap-add NET_ADMIN`) that **blocks new connections to private/special
-ranges** — RFC1918, link-local incl. cloud-metadata `169.254.169.254`, CGNAT,
-loopback-net, reserved/multicast — while allowing DNS, established connections, and
-the public internet. This stops submitted code from reaching the host LAN or
-metadata service. (Verified on the live VPS: metadata, host-private, and
-docker-bridge IPs all blocked; public + DNS allowed.) The worker then drops to a
-non-root user. `EDGECLOUD_SKIP_FIREWALL=1` disables it for local testing only.
+Submitted code is untrusted and hostile by assumption, so the worker is locked down
+in **defense-in-depth layers** (see `THREAT_MODEL.md` for the full model). The
+container is the boundary; the supervisor runs as root but heavily confined, and
+**each job is dropped to an unprivileged `sandbox` uid (10002)** that owns nothing.
+
+Per-job isolation (`worker/src/executor/`, run as uid 10002 via `setpriv
+--clear-groups --no-new-privs`):
+- **No secrets.** `/data` (libp2p private key, OrbitDB state) is root-owned, mode
+  700 — the sandbox uid cannot read it. *Verified: `BLOCKED:ERR_ACCESS_DENIED`.*
+- **No network.** An iptables `-m owner --uid-owner 10002 -j REJECT` rule drops all
+  egress from the job's uid, while the worker keeps libp2p connectivity. Pure-compute
+  jobs need none. *Verified: `NET-BLOCKED:ENETUNREACH`.*
+- **JS** runs under Node's Permission Model (`--permission
+  --allow-fs-read/write=<scratch>`): filesystem confined to a throwaway scratch dir,
+  and `child_process` / `worker_threads` / native addons / WASI all denied.
+  *Verified: child-process spawn `BLOCKED:ERR_ACCESS_DENIED`.*
+- **WASM** runs under wasmtime with a worker-constructed argv — **`manifest.command`
+  is ignored** (it was attacker-controllable), only one preopened dir (scratch),
+  `inherit-network=n`, `inherit-env=n`, and a 256 MiB memory cap.
+
+Container-level (`worker/docker-compose.yml`): `cap_drop: ALL` plus a 5-cap
+allow-list (NET_ADMIN, CHOWN, SETUID, SETGID, KILL), `no-new-privileges`, read-only
+root filesystem + `noexec/nosuid` tmpfs scratch, `pids_limit`, `cpus`, `mem_limit`
+(no swap), and `ulimits`. Docker's default seccomp stays enforced. A timed-out job
+is killed by process group (catches grandchildren). gVisor (`runtime: runsc`) is
+documented as an optional stronger-isolation runtime.
+
+Defense-in-depth egress also blocks **everyone** from private/special ranges
+(RFC1918, link-local incl. cloud-metadata `169.254.169.254`, CGNAT, loopback-net,
+reserved/multicast) while allowing DNS + established + public for the worker.
+`EDGECLOUD_SKIP_FIREWALL=1` disables the firewall for local testing only.
+
+This is hardening, not a guarantee — a kernel/Docker escape or wasmtime/Node 0-day
+still defeats it. It is **not** an isolation boundary for highly sensitive workloads;
+see `THREAT_MODEL.md` and the Aegis/TEE direction for what real confidentiality needs.
 
 ## Repository layout
 

@@ -32,9 +32,12 @@ RUN curl -fsSL "https://github.com/bytecodealliance/wasmtime/releases/download/$
  && rm -rf /tmp/wasmtime-* \
  && wasmtime --version
 
-# Non-root user for the worker process (entrypoint drops privileges after
-# installing the firewall rules).
-RUN useradd --create-home --uid 10001 worker
+# Locked-down uid that UNTRUSTED submitted code runs as. It owns nothing —
+# no shell, no home — and cannot read /data (the worker's libp2p private key
+# + OrbitDB state, which stay root-owned, mode 700). The entrypoint's iptables
+# rules also block this uid from all network egress. See entrypoint.sh and
+# worker/src/executor/.
+RUN useradd --no-create-home --uid 10002 --shell /usr/sbin/nologin sandbox
 
 WORKDIR /app
 
@@ -49,12 +52,19 @@ RUN npm ci --omit=dev --workspace @edgecloud/shared --workspace @edgecloud/worke
 COPY shared/src shared/src
 COPY worker/src worker/src
 COPY worker/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh && mkdir -p /data && chown -R worker:worker /data /app
+# The worker supervisor runs as root (confined by a minimal capability set +
+# no-new-privileges + read-only rootfs in docker-compose.yml); it drops each
+# job to the unprivileged `sandbox` uid. /app stays root-owned and read-only.
+RUN chmod +x /entrypoint.sh && mkdir -p /data && chown -R root:root /data /app && chmod 700 /data
 
 # /data holds the libp2p peerId, OrbitDB identity, and replicated blocks —
 # mount a volume so the worker keeps its identity across restarts.
 VOLUME /data
-ENV EDGECLOUD_DATA=/data
+ENV EDGECLOUD_DATA=/data \
+    EDGECLOUD_SANDBOX_UID=10002 \
+    EDGECLOUD_SANDBOX_GID=10002 \
+    HOME=/tmp \
+    TMPDIR=/tmp
 
 ENTRYPOINT ["tini", "--", "/entrypoint.sh"]
 CMD ["node", "worker/src/index.js"]

@@ -16,6 +16,11 @@ export const config = {
   // chaodoze's EDGECLOUD_MAX_CONCURRENT). The claim protocol does not yet gate
   // on this — it's advertised for display and future least-loaded routing.
   maxConcurrent: Number(process.env.EDGECLOUD_MAX_CONCURRENT) || 4,
+  // The unprivileged uid/gid that UNTRUSTED submitted code is dropped to. Set
+  // in the Docker image; unset in local dev/tests (jobs then run in-process as
+  // the current user — fine for trusted local runs, NOT for production).
+  sandboxUid: process.env.EDGECLOUD_SANDBOX_UID ? Number(process.env.EDGECLOUD_SANDBOX_UID) : null,
+  sandboxGid: process.env.EDGECLOUD_SANDBOX_GID ? Number(process.env.EDGECLOUD_SANDBOX_GID) : null,
 };
 
 if (config.rendezvous.length === 0) {

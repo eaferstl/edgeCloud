@@ -39,23 +39,39 @@ OrbitDB-coordinated exactly-once-ish claim protocol, hardened Docker workers. Se
 
 ## B. Trust & verification (don't trust the worker)
 
+**✅ Shipped (the accountable-identity baseline):**
+- **Accountable, non-grindable worker selection.** The tiebreak is now
+  `min sha256(jobId‖workerKey‖round)` over **signed, key-bound** claims, and worker
+  identity is a **non-rotatable Ed25519 key registered against an allowlisted attendee
+  email** (≤25 worker keys/email). The coordinator counts claims **only from registered
+  workers**, so the candidate supply is bounded by the attendee list instead of the
+  infinite supply of free peerIds the original design allowed — grinding now costs real,
+  rate-limited identities rather than a hash loop. (`THREAT_MODEL.md` R-010.)
+- **Signed results.** The executing worker signs its result with its identity key; the
+  server verifies before caching/serving and workers verify before treating a job as done
+  — closing *third-party* result forgery (`THREAT_MODEL.md` R-003).
+
+**Next (detecting a *registered worker that lies* — signing proves who, not what):**
+- **Redundant compute with disagreement-triggered recompute** (the Golem optimization) —
+  run a job on 2 workers; compute a **3rd only if the first two disagree**. Near-free
+  verification — no 3× cost on the happy path. Composes with reputation (below).
+- **Determinism as content-addressing** (the brilliantly-simple version) — since a job is
+  a pure function of its inputs, honest workers produce **byte-identical** output, so the
+  **hash of the result is itself the agreement token**: matching hashes from independent
+  registered identities confirm correctness with no coordinator; a mismatch is a provable
+  dispute.
+- **Reputation as a disincentive to lie / to grind** — weight selection and result
+  acceptance by a per-key / per-email reputation that drops sharply on any detected
+  disagreement. With email-gated identity, a burned reputation is costly to shed, which
+  also disincentivizes the in-quota grinding remainder under R-010.
+- **Non-grindable tiebreak input** — a per-round randomness beacon / VRF / commit-reveal
+  revealed only *after* claims are locked, so even a registered worker can't pre-compute
+  the winning value.
 - **TEEs for execution** — workers run in AMD SEV-SNP / Intel TDX (+ GPU TEEs) so the
   *operator* can't see or tamper with the workload; **remote attestation** proves what
   code ran. (The Aegis/Aestrel direction.)
-- **Redundant compute with disagreement-triggered recompute** (the Golem optimization) —
-  run a job on 2 workers; compute a **3rd only if the first two disagree**. Near-free
-  verification — no 3× cost on the happy path. Composes with reputation (below) and with
-  signed results.
-- **Signed results** — the executing worker signs its result; consumers verify (closes
-  today's unsigned-result gap, `THREAT_MODEL.md` R-003). See `ARCHITECTURE.md` for a
-  design sketch.
-- **Accountable / non-grindable worker selection** — the current tiebreak
-  (`min sha256(jobId‖peerId‖round)`) is over freely-generated libp2p peerIds, so a worker
-  can grind peerIds (Sybil) to win specific jobs. Harden by: binding worker identity to a
-  **registered/attested public key** (not a free-to-rotate peerId), and/or making the
-  tiebreak input non-grindable (a per-round randomness beacon / VRF / commit-reveal
-  revealed only *after* claims are locked), and/or reputation-weighting (below). *(Being
-  analyzed; see `THREAT_MODEL.md`.)*
+- **Verifiable compute / proofs** — zk or replicated-execution proofs for workloads that
+  warrant it (long-horizon).
 - **Verifiable compute / proofs** — zk or replicated-execution proofs for workloads that
   warrant it (long-horizon).
 

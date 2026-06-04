@@ -46,6 +46,10 @@ services:
       nproc: 256
       core: 0
     environment:
+      # REQUIRED: your Edge Esmeralda attendee email. The worker registers its
+      # identity key against it (≤25 workers/email) and refuses to start without
+      # it — worker identity is accountable, not anonymous (THREAT_MODEL R-010).
+      EDGECLOUD_EMAIL: "${EDGECLOUD_EMAIL:?set EDGECLOUD_EMAIL to your attendee email}"
       # Rendezvous defaults are baked into shared/src/constants.js; override here.
       # RENDEZVOUS_MULTIADDR: "/ip4/146.190.123.91/tcp/4002/ws/p2p/<SERVER_PEER_ID>"
       # EDGECLOUD_HTTP_FALLBACK: "http://146.190.123.91"

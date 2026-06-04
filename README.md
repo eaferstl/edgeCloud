@@ -36,15 +36,21 @@ the network) differs, so it's called out in each section.
 <a id="run-a-worker"></a>
 ### 2. Technical user — donate compute (run a worker node)
 
-Runs the compute. Requires Docker. **No registration or secret needed** — a worker is
-anonymous; it just needs to reach a server. Onboarding is automatic: it dials the genesis
-rendezvous server (baked into `shared/src/constants.js`), replicates the OrbitDB job queue,
-and starts claiming jobs.
+Runs the compute. Requires Docker. **A worker is no longer anonymous** — it registers a
+persistent Ed25519 identity key against your **Edge Esmeralda attendee email** (set
+`EDGECLOUD_EMAIL`), the same allowlist users go through. This is what makes worker
+selection accountable: a worker's identity is its base64 public key, every claim and result
+is signed with it, and the network only counts claims from registered workers. You may run
+up to **25 worker nodes per email** (a Sybil / work-stealing bound — see
+[`THREAT_MODEL.md`](THREAT_MODEL.md) R-010). Onboarding is otherwise automatic: it dials the
+genesis rendezvous server (baked into `shared/src/constants.js`), replicates the OrbitDB job
+queue, and starts claiming jobs.
 
 ```bash
 git clone <this repo> && cd edgeCloud/worker
+export EDGECLOUD_EMAIL=you@example.com   # your Edge Esmeralda attendee email (required)
 docker compose up --build -d          # needs CAP_NET_ADMIN (compose sets it)
-docker compose logs -f                # expect: "connected to rendezvous …"
+docker compose logs -f                # expect: "worker identity key registered" + "connected to rendezvous …"
 ```
 
 It will appear at http://146.190.123.91/api/status (`workersOnline`, with its CPU/RAM/disk
@@ -80,7 +86,7 @@ user-registrations — no redeploys. Trust chains transitively from the **genesi
 | Role | Install | Secret/seed needed? | How it's trusted |
 |---|---|---|---|
 | **User** (browser) | none | no — keypair auto-generated in-browser | email must be on the attendee allowlist; ≤4 keys/email |
-| **Worker** (Docker) | Docker | no | anonymous; just dials a server and replicates |
+| **Worker** (Docker) | Docker | `EDGECLOUD_EMAIL` (attendee email) | registers a signing identity key against an allowlisted email; ≤25 workers/email |
 | **Server** (operator) | Node 22 | yes — shared `EDGECLOUD_SHARED_SALT` + attendee CSV | endorsed by an already-trusted server (chains from genesis) |
 
 - **Architecture & how it works:** [`ARCHITECTURE.md`](ARCHITECTURE.md) (authoritative)

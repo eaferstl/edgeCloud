@@ -36,6 +36,16 @@
   </header>
 
   <main>
+    <!-- Live execution map: where jobs run across the network -->
+    <section class="card viz-card" id="vizPanel">
+      <div class="viz-head">
+        <span class="viz-title">⚡ Live execution map</span>
+        <span id="vizHint" class="viz-hint small">jobs flowing from the rendezvous / OrbitDB to the worker that runs them</span>
+      </div>
+      <svg id="vizSvg" viewBox="0 0 1000 300" preserveAspectRatio="xMidYMid meet"
+           role="img" aria-label="Live map of worker nodes executing jobs"></svg>
+    </section>
+
     <!-- Step 1: identity -->
     <section class="card" id="identityCard">
       <h2>1 · Your identity</h2>

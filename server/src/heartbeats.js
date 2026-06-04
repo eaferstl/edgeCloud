@@ -36,6 +36,31 @@ export function watchHeartbeats(libp2p, log = console.log) {
     }
   }, 5000).unref();
 
+  // Resolve a worker's source IP from the server's live libp2p connection to its
+  // transport peerId. Direct connections give the worker's real (NAT) IP; we skip
+  // relayed addrs (their visible /ip4 is the relay's, not the worker's).
+  function ipFromMultiaddr(s) {
+    const m4 = /\/ip4\/([0-9.]+)/.exec(s);
+    if (m4) return m4[1];
+    const m6 = /\/ip6\/([0-9a-fA-F:]+)/.exec(s);
+    return m6 ? m6[1] : null;
+  }
+  function ipFor(libp2pPeerId) {
+    if (!libp2pPeerId) return null;
+    try {
+      const conns = libp2p.getConnections().filter((c) => c.remotePeer.toString() === libp2pPeerId);
+      for (const c of conns) {
+        const s = c.remoteAddr.toString();
+        if (s.includes('p2p-circuit')) continue; // relayed: ip is the relay's
+        const ip = ipFromMultiaddr(s);
+        if (ip) return ip;
+      }
+    } catch {
+      /* libp2p not ready / peer gone */
+    }
+    return null;
+  }
+
   // Project a device record into the public status shape (omit nothing
   // sensitive — these are host capability facts, no PII).
   function summary(peerId, d) {
@@ -50,6 +75,12 @@ export function watchHeartbeats(libp2p, log = console.log) {
       maxConcurrent: r.maxConcurrent ?? null,
       currentLoad: r.currentLoad ?? null,
       availableCapacity: r.availableCapacity ?? null,
+      // --- live-map fields ---
+      ip: ipFor(r.libp2pPeerId), // server-observed source IP (null if relayed/unknown)
+      libp2pPeerId: r.libp2pPeerId ?? null,
+      // proximity to the rendezvous: filled in once the latency work lands (the
+      // worker can carry rttMs in its heartbeat); the UI lays out by this.
+      rttMs: typeof r.rttMs === 'number' ? r.rttMs : null,
     };
   }
 

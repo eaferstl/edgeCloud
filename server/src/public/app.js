@@ -499,6 +499,7 @@ async function refreshStatus() {
   try {
     lastStatus = await (await fetch('/api/status')).json();
     renderPill(lastStatus);
+    renderViz(lastStatus);
   } catch (e) {
     $('netStatus').classList.remove('online');
     $('netStatus').textContent = 'Server unreachable';
@@ -506,8 +507,139 @@ async function refreshStatus() {
   }
 }
 
+// ===================== live execution map =====================
+// Rendezvous/OrbitDB in the center; worker nodes around it labeled with IP +
+// proximity. When a job completes, a packet glides from the center to the worker
+// that ran it and the node pulses. Layout radius is driven by rttMs (proximity)
+// once the latency work lands; until then nodes sit at a fixed radius.
+var SVGNS = 'http://www.w3.org/2000/svg';
+function svgEl(name, attrs) {
+  var e = document.createElementNS(SVGNS, name);
+  if (attrs) for (var k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
+var VIZ = {
+  inited: false, center: { x: 500, y: 152 },
+  layers: {}, nodeEls: {}, linkEls: {}, pos: {},
+  seen: new Set(), seeded: false,
+};
+
+function initViz() {
+  var svg = $('vizSvg');
+  if (!svg || VIZ.inited) return;
+  VIZ.layers.links = svg.appendChild(svgEl('g', { id: 'vizLinks' }));
+  VIZ.layers.packets = svg.appendChild(svgEl('g', { id: 'vizPackets' }));
+  VIZ.layers.nodes = svg.appendChild(svgEl('g', { id: 'vizNodes' }));
+  // rendezvous / OrbitDB node (built once)
+  var c = VIZ.center;
+  var g = svgEl('g', { class: 'viz-server', transform: 'translate(' + c.x + ',' + c.y + ')' });
+  g.appendChild(svgEl('circle', { class: 'body', r: 34 }));
+  var t1 = svgEl('text', { class: 't1', 'text-anchor': 'middle', y: -4 }); t1.textContent = 'RENDEZVOUS';
+  var t2 = svgEl('text', { class: 't2', 'text-anchor': 'middle', y: 12 }); t2.textContent = 'OrbitDB · libp2p';
+  var t3 = svgEl('text', { class: 't2', 'text-anchor': 'middle', y: 50 }); t3.textContent = location.hostname;
+  g.appendChild(t1); g.appendChild(t2); g.appendChild(t3);
+  VIZ.layers.nodes.appendChild(g);
+  VIZ.empty = svgEl('text', { class: 'viz-empty', 'text-anchor': 'middle', x: c.x, y: c.y + 96 });
+  VIZ.empty.textContent = 'no worker nodes online yet';
+  svg.appendChild(VIZ.empty);
+  VIZ.inited = true;
+}
+
+function layoutViz(devices) {
+  var c = VIZ.center, rx = 400, ry = 92, n = devices.length, pos = {};
+  var rtts = devices.map(function (d) { return typeof d.rttMs === 'number' ? d.rttMs : null; });
+  var maxRtt = Math.max.apply(null, rtts.filter(function (x) { return x != null; }).concat([1]));
+  devices.forEach(function (d, i) {
+    var ang = -Math.PI / 2 + (n ? (i / n) * 2 * Math.PI : 0);
+    var f = typeof d.rttMs === 'number' ? (0.5 + 0.5 * (d.rttMs / (maxRtt || 1))) : 1; // closer = lower rtt
+    pos[d.peerId] = { x: c.x + rx * f * Math.cos(ang), y: c.y + ry * f * Math.sin(ang) };
+  });
+  return pos;
+}
+
+function renderViz(s) {
+  if (!$('vizSvg')) return;
+  initViz();
+  var devices = (s.devices || []).slice().sort(function (a, b) { return a.peerId < b.peerId ? -1 : 1; });
+  var c = VIZ.center;
+  VIZ.pos = layoutViz(devices);
+  if (VIZ.empty) VIZ.empty.style.display = devices.length ? 'none' : '';
+  var live = {};
+
+  devices.forEach(function (d) {
+    var id = d.peerId, p = VIZ.pos[id]; live[id] = true;
+    var statusCls = (d.currentLoad > 0 ? 'busy' : 'available');
+    // link
+    var link = VIZ.linkEls[id];
+    if (!link) { link = svgEl('line', { class: 'viz-link' }); VIZ.layers.links.appendChild(link); VIZ.linkEls[id] = link; }
+    link.setAttribute('x1', c.x); link.setAttribute('y1', c.y); link.setAttribute('x2', p.x); link.setAttribute('y2', p.y);
+    // node
+    var n = VIZ.nodeEls[id];
+    if (!n) {
+      n = svgEl('g', { class: 'viz-node' });
+      n.appendChild(svgEl('circle', { class: 'ring', r: 17 }));
+      n.appendChild(svgEl('circle', { class: 'body', r: 14 }));
+      n._nm = svgEl('text', { class: 'nm', 'text-anchor': 'middle', y: -24 });
+      n._ip = svgEl('text', { class: 'ip', 'text-anchor': 'middle', y: 30 });
+      n._px = svgEl('text', { class: 'px', 'text-anchor': 'middle', y: 44 });
+      n.appendChild(n._nm); n.appendChild(n._ip); n.appendChild(n._px);
+      VIZ.layers.nodes.appendChild(n); VIZ.nodeEls[id] = n;
+    }
+    n.setAttribute('transform', 'translate(' + p.x + ',' + p.y + ')');
+    n.setAttribute('class', 'viz-node ' + statusCls + (n.classList.contains('pulsing') ? ' pulsing' : ''));
+    n._nm.textContent = (d.peerId || '').slice(0, 8);
+    n._ip.textContent = d.ip || '—';
+    n._px.textContent = (typeof d.rttMs === 'number') ? ('~' + Math.round(d.rttMs) + ' ms') : 'measuring…';
+  });
+
+  // remove departed workers
+  Object.keys(VIZ.nodeEls).forEach(function (id) {
+    if (!live[id]) {
+      if (VIZ.nodeEls[id].parentNode) VIZ.nodeEls[id].parentNode.removeChild(VIZ.nodeEls[id]);
+      if (VIZ.linkEls[id] && VIZ.linkEls[id].parentNode) VIZ.linkEls[id].parentNode.removeChild(VIZ.linkEls[id]);
+      delete VIZ.nodeEls[id]; delete VIZ.linkEls[id];
+    }
+  });
+
+  animateExecutions(s.recentExecutions || []);
+}
+
+function animateExecutions(execs) {
+  if (!VIZ.seeded) { execs.forEach(function (e) { VIZ.seen.add(e.jobId); }); VIZ.seeded = true; return; }
+  // newest-first → walk oldest-first so a burst animates in order
+  for (var i = execs.length - 1; i >= 0; i--) {
+    var e = execs[i];
+    if (VIZ.seen.has(e.jobId)) continue;
+    VIZ.seen.add(e.jobId);
+    if (e.ts && e.ts > Date.now() - 45000 && e.executedBy && VIZ.pos[e.executedBy]) {
+      flyPacket(VIZ.pos[e.executedBy]);
+      pulseNode(e.executedBy);
+    }
+  }
+}
+
+function flyPacket(to) {
+  var layer = VIZ.layers.packets; if (!layer || !to) return;
+  var c = VIZ.center;
+  var dot = svgEl('circle', { cx: c.x, cy: c.y, r: 5.5, class: 'viz-packet' });
+  dot.style.transform = 'translate(0px,0px)';
+  layer.appendChild(dot);
+  requestAnimationFrame(function () { requestAnimationFrame(function () {
+    dot.style.transform = 'translate(' + (to.x - c.x) + 'px,' + (to.y - c.y) + 'px)';
+  }); });
+  setTimeout(function () { dot.style.opacity = '0'; }, 880);
+  setTimeout(function () { if (dot.parentNode) dot.parentNode.removeChild(dot); }, 1400);
+}
+
+function pulseNode(peerId) {
+  var n = VIZ.nodeEls[peerId]; if (!n) return;
+  n.classList.remove('pulsing'); try { n.getBBox(); } catch (e) {} // reflow → restart animation
+  n.classList.add('pulsing');
+  setTimeout(function () { n.classList.remove('pulsing'); }, 950);
+}
+
 renderIdentity();
 renderHistory();
 populateExamples();
 refreshStatus();
-setInterval(refreshStatus, 10000);
+setInterval(refreshStatus, 3000); // brisk poll so the live map feels real-time

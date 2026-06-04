@@ -195,6 +195,8 @@ export function createApp({ q, auth, databases, indexers, heartbeats, serverKey,
       allowlistedEmails: q.allowlistCount(),
       cachedResults: q.cachedResultCount(),
       trustedServers: indexers.state.trustedServers.size,
+      // live execution map: recent "who ran what", newest first
+      recentExecutions: q.recentResults(24),
     });
   });
 

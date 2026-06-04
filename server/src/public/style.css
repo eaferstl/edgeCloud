@@ -151,3 +151,36 @@ footer {
   margin: 0 auto;
 }
 footer a { color: var(--muted); }
+
+/* ---------- live execution map ---------- */
+.viz-card { padding-bottom: 0.6rem; overflow: hidden; }
+.viz-head { display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.2rem; }
+.viz-title { font-weight: 600; font-size: 0.98rem; }
+.viz-hint { color: var(--muted); }
+#vizSvg { width: 100%; height: auto; display: block; }
+
+/* links (libp2p connections) — a slow dash flow suggests replication */
+.viz-link { stroke: #2f3a4d; stroke-width: 1.4; fill: none; stroke-dasharray: 3 7; animation: vizflow 1.1s linear infinite; }
+@keyframes vizflow { to { stroke-dashoffset: -20; } }
+
+/* nodes */
+.viz-node .body { stroke-width: 2; transition: fill 0.4s, stroke 0.4s; }
+.viz-node.available .body { fill: #10261a; stroke: var(--ok); }
+.viz-node.busy .body { fill: #2a230f; stroke: #ffcf5c; }
+.viz-node text { fill: var(--text); font-family: inherit; }
+.viz-node .nm { font-size: 13px; font-weight: 600; }
+.viz-node .ip { fill: #8ad; font-size: 12px; font-family: ui-monospace, Menlo, monospace; }
+.viz-node .px { fill: var(--muted); font-size: 11px; }
+.viz-server .body { fill: #11203a; stroke: var(--accent); stroke-width: 2.5; }
+.viz-server .t1 { font-size: 13px; font-weight: 700; fill: #cfe0ff; }
+.viz-server .t2 { font-size: 11px; fill: var(--muted); }
+
+/* execution pulse on the worker that just ran a job */
+.viz-node .ring { fill: none; stroke: var(--ok); stroke-width: 2; opacity: 0; transform-box: fill-box; transform-origin: center; }
+.viz-node.busy .ring { stroke: #ffcf5c; }
+.viz-node.pulsing .ring { animation: vizpulse 0.9s ease-out; }
+@keyframes vizpulse { 0% { opacity: 0.85; transform: scale(1); } 100% { opacity: 0; transform: scale(2.6); } }
+
+/* the job "packet" gliding from the center to its worker */
+.viz-packet { fill: #ffd36a; filter: drop-shadow(0 0 5px #ffcf5c); transition: transform 0.85s cubic-bezier(.45,.05,.25,1), opacity 0.45s ease; }
+.viz-empty { fill: var(--muted); font-size: 13px; }

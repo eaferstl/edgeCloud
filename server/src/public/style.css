@@ -92,7 +92,9 @@ form { display: flex; flex-direction: column; gap: 0.2rem; }
 .msg.err { color: var(--err); }
 
 .mono { font-family: var(--mono); }
-.small { font-size: 0.8rem; color: var(--muted); word-break: break-all; }
+/* Break at word boundaries; only break *inside* a token (e.g. a long base64
+   pubkey) when it can't fit on its own line — never mid-word for normal prose. */
+.small { font-size: 0.8rem; color: var(--muted); overflow-wrap: break-word; word-break: normal; }
 
 pre {
   background: #0b0e13;

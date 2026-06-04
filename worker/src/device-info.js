@@ -12,10 +12,50 @@
 
 import os from 'node:os';
 import fs from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 
-// Disk space for the volume holding `p`. statfs gives block counts; bytes =
-// blocks * block size. bavail = blocks free to non-root users. (Node 18.15+.)
-export async function getStorage(p = '.') {
+// PRIVACY: we advertise only what is available to THIS container (its cgroup
+// limits), NOT the host's total RAM / core count / disk — that would needlessly
+// leak the operator's machine specs to the whole network. Outside a limited
+// cgroup (local dev) we fall back to host values.
+
+// Cores available to this container (cgroup v2 CPU quota = quota/period).
+function availableCores() {
+  try {
+    const [quota, period] = readFileSync('/sys/fs/cgroup/cpu.max', 'utf8').trim().split(/\s+/);
+    if (quota !== 'max') {
+      const cores = Number(quota) / Number(period);
+      if (cores > 0) return Math.round(cores * 100) / 100;
+    }
+  } catch {
+    /* not a limited cgroup v2 — fall through */
+  }
+  return (os.cpus() || []).length; // local-dev fallback
+}
+
+// Memory available to this container (cgroup v2 limit + current usage), not host total.
+function containerMemory() {
+  try {
+    const max = readFileSync('/sys/fs/cgroup/memory.max', 'utf8').trim();
+    if (max !== 'max') {
+      const totalBytes = Number(max);
+      let used = 0;
+      try {
+        used = Number(readFileSync('/sys/fs/cgroup/memory.current', 'utf8').trim());
+      } catch {
+        /* current usage unavailable */
+      }
+      if (totalBytes > 0) return { totalBytes, freeBytes: Math.max(0, totalBytes - used) };
+    }
+  } catch {
+    /* not a limited cgroup v2 — fall through */
+  }
+  return { totalBytes: os.totalmem(), freeBytes: os.freemem() }; // local-dev fallback
+}
+
+// Disk free in the job scratch area (statfs on the scratch/tmp path), so we
+// report usable scratch space, not the host's total disk size.
+export async function getStorage(p = os.tmpdir()) {
   try {
     const s = await fs.statfs(p);
     return { totalBytes: s.blocks * s.bsize, freeBytes: s.bavail * s.bsize };
@@ -25,17 +65,15 @@ export async function getStorage(p = '.') {
 }
 
 export function getRam() {
-  return { totalBytes: os.totalmem(), freeBytes: os.freemem() };
+  return containerMemory();
 }
 
 export function getCpu() {
-  const cpus = os.cpus() || [];
   return {
-    model: cpus[0]?.model?.trim() ?? 'unknown',
-    cores: cpus.length,
+    cores: availableCores(), // cores available to THIS container, not the host
     arch: os.arch(),
     platform: os.platform(),
-    // "how busy is the host" — a coarse secondary signal. On Windows this is 0.
+    // "how busy is this container" — coarse secondary signal. On Windows this is 0.
     load1m: os.loadavg()[0],
   };
 }
@@ -51,9 +89,9 @@ export async function buildDeviceRecord(peerId, live) {
     v: 1,
     peerId,
     hostname: os.hostname(),
-    cpu: getCpu(), // { model, cores, arch, platform, load1m }
-    ram: getRam(), // { totalBytes, freeBytes }
-    storage: await getStorage('.'), // { totalBytes, freeBytes }
+    cpu: getCpu(), // { cores, arch, platform, load1m } — container-scoped, no host model
+    ram: getRam(), // { totalBytes, freeBytes } — container cgroup limit, not host total
+    storage: await getStorage(), // scratch (tmpfs) free space, not host disk size
     status: live.status, // "available" | "draining" | "offline"
     maxConcurrent: live.maxConcurrent,
     currentLoad: live.currentLoad, // edgeCloud jobs running right now

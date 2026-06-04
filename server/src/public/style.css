@@ -122,6 +122,24 @@ pre.stderr { color: var(--err); }
 .history li a { color: var(--accent); cursor: pointer; text-decoration: none; }
 .history .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+.explainer ol.how {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+.explainer ol.how li {
+  margin: 0.55rem 0;
+  color: var(--text);
+}
+.explainer ol.how strong { color: var(--accent); font-weight: 600; }
+
+.devs .ghlink {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 0.95rem;
+}
+.devs a { color: var(--accent); text-decoration: none; }
+.devs a:hover { text-decoration: underline; }
+
 footer {
   text-align: center;
   color: var(--muted);
@@ -130,3 +148,4 @@ footer {
   max-width: 680px;
   margin: 0 auto;
 }
+footer a { color: var(--muted); }

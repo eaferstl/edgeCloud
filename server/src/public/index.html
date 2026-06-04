@@ -84,11 +84,47 @@
       <h2>Past jobs (this browser)</h2>
       <ul id="historyList"></ul>
     </section>
+
+    <section class="card explainer">
+      <h2>How does this work?</h2>
+      <ol class="how">
+        <li><strong>Your browser makes a key.</strong> When you register, your phone or
+          laptop generates a cryptographic keypair and keeps the secret half locally. Your
+          email is only used to check you're on the Edge Esmeralda guest list — it's never
+          shared with the network.</li>
+        <li><strong>You sign and submit a job.</strong> Your code (a little JavaScript, or a
+          WebAssembly module) is packaged and signed with your key, then handed to a
+          coordinating server.</li>
+        <li><strong>Volunteers' devices run it.</strong> The job is shared over a
+          peer-to-peer network to <em>worker nodes</em> — computers other attendees are
+          running. They agree among themselves on exactly one node to run your job (no
+          central boss), so it isn't run twice.</li>
+        <li><strong>The answer comes back to you only.</strong> The result travels back
+          through the network. To read it you prove you hold your key, so no one else can
+          see your output.</li>
+      </ol>
+      <p class="small">There's no blockchain and no company server farm — the "cloud" is just
+        everyone's devices, coordinating directly. It's a prototype, so keep it fun and
+        don't submit anything sensitive.</p>
+    </section>
+
+    <section class="card devs">
+      <h2>For developers 👩‍💻</h2>
+      <p>edgeCloud is <strong>open source (MIT-licensed)</strong>. The full code, architecture
+        notes, and docs live on GitHub:</p>
+      <p><a class="ghlink" href="https://github.com/eaferstl/edgeCloud" target="_blank" rel="noopener">
+        github.com/eaferstl/edgeCloud →</a></p>
+      <p>Want to <strong>donate compute</strong>? Spin up a worker node (it's a Docker
+        container) and it'll join the network automatically:
+        <a href="https://github.com/eaferstl/edgeCloud#run-a-worker" target="_blank" rel="noopener">
+        run a worker node →</a></p>
+    </section>
   </main>
 
   <footer>
     <p>Prototype for demonstration only. Jobs run on volunteer attendee devices;
        don't submit anything secret, and don't rely on this for anything important.</p>
+    <p><a href="https://github.com/eaferstl/edgeCloud" target="_blank" rel="noopener">Open source (MIT)</a></p>
   </footer>
 
   <script src="vendor/nacl.min.js"></script>

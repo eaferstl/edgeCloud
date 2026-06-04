@@ -30,6 +30,7 @@ the network) differs, so it's called out in each section.
    submit. The job runs on a volunteer worker node and the result comes back **to you only**
    (proven by signing a server challenge with your key).
 
+<a id="run-a-worker"></a>
 ### 2. Technical user — donate compute (run a worker node)
 
 Runs the compute. Requires Docker. **No registration or secret needed** — a worker is

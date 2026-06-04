@@ -562,6 +562,14 @@ var VIZ = {
 function initViz() {
   var svg = $('vizSvg');
   if (!svg || VIZ.inited) return;
+  var defs = svg.appendChild(svgEl('defs'));
+  var glow = svgEl('filter', { id: 'vizWhiteGlow', filterUnits: 'userSpaceOnUse', x: -1000, y: -1000, width: 3000, height: 3000 });
+  glow.appendChild(svgEl('feGaussianBlur', { in: 'SourceGraphic', stdDeviation: 4, result: 'blur' }));
+  var merge = svgEl('feMerge');
+  merge.appendChild(svgEl('feMergeNode', { in: 'blur' }));
+  merge.appendChild(svgEl('feMergeNode', { in: 'SourceGraphic' }));
+  glow.appendChild(merge);
+  defs.appendChild(glow);
   VIZ.layers.links = svg.appendChild(svgEl('g', { id: 'vizLinks' }));
   VIZ.layers.packets = svg.appendChild(svgEl('g', { id: 'vizPackets' }));
   VIZ.layers.nodes = svg.appendChild(svgEl('g', { id: 'vizNodes' }));
@@ -652,7 +660,45 @@ function handleExecution(e) {
   // a job this browser is waiting on just finished → fetch its result NOW (evented)
   if (awaiting && awaiting.jobId === e.jobId && awaiting.deliver) awaiting.deliver();
   if (e.ts && e.ts < Date.now() - 60000) return; // stale backlog → don't animate
-  if (e.executedBy && VIZ.pos[e.executedBy]) { flyPacket(VIZ.pos[e.executedBy]); pulseNode(e.executedBy); }
+  if (e.executedBy && VIZ.pos[e.executedBy]) { animateLink(e.executedBy); pulseNode(e.executedBy); }
+}
+
+// Bright white data pulse riding the worker's existing fiber. The overlay lives
+// above idle links but below nodes, then removes itself after the SMIL animation.
+function animateLink(peerId) {
+  var layer = VIZ.layers.packets, to = VIZ.pos[peerId];
+  if (!layer || !to) return;
+  var c = VIZ.center, dx = to.x - c.x, dy = to.y - c.y, length = Math.sqrt(dx * dx + dy * dy);
+  if (!length) return;
+  var DUR = 1.0, pulseLen = Math.min(115, Math.max(60, length * 0.24));
+  var pulse = svgEl('line', {
+    class: 'viz-link-pulse',
+    x1: c.x, y1: c.y, x2: to.x, y2: to.y,
+    filter: 'url(#vizWhiteGlow)',
+    'stroke-dasharray': pulseLen + ' ' + (length + pulseLen),
+    'stroke-dashoffset': 0,
+  });
+  var dash = svgEl('animate', {
+    attributeName: 'stroke-dashoffset',
+    from: 0,
+    to: -(length + pulseLen),
+    dur: DUR + 's',
+    fill: 'freeze',
+    calcMode: 'spline',
+    keyTimes: '0;1',
+    keySplines: '0.35 0 0.25 1',
+  });
+  var fade = svgEl('animate', {
+    attributeName: 'opacity',
+    values: '0;1;1;0',
+    keyTimes: '0;0.12;0.82;1',
+    dur: DUR + 's',
+    fill: 'freeze',
+  });
+  pulse.appendChild(dash); pulse.appendChild(fade);
+  layer.appendChild(pulse);
+  try { dash.beginElement(); fade.beginElement(); } catch (e) {}
+  setTimeout(function () { if (pulse.parentNode) pulse.parentNode.removeChild(pulse); }, DUR * 1000 + 220);
 }
 
 // Send a glowing "job" packet gliding from the rendezvous out to the worker that

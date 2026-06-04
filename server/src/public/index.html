@@ -40,7 +40,7 @@
     <section class="card viz-card" id="vizPanel">
       <div class="viz-head">
         <span class="viz-title">⚡ Live execution map</span>
-        <span id="vizHint" class="viz-hint small">jobs flowing from the rendezvous / OrbitDB to the worker that runs them</span>
+        <span id="vizHint" class="viz-hint small">white = job dispatched to a worker · teal = its result replicating to <em>every</em> node (CRDT / p2p — no central copy)</span>
       </div>
       <svg id="vizSvg" viewBox="0 0 1000 400" preserveAspectRatio="xMidYMid meet"
            role="img" aria-label="Live map of worker nodes executing jobs"></svg>

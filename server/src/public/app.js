@@ -369,7 +369,7 @@ function showResultCard(jobId) {
   $('resultOut').hidden = true;
   $('resultErr').hidden = true;
   $('resultMeta').hidden = true;
-  $('resultCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  // no auto-scroll — keep the live map in view during the demo
 }
 
 // Wait for a job's result. Primary path is EVENTED: the SSE 'execution' event
@@ -620,7 +620,8 @@ function renderViz(s) {
     var n = VIZ.nodeEls[id];
     if (!n) {
       n = svgEl('g', { class: 'viz-node' });
-      n.appendChild(svgEl('circle', { class: 'ring', r: 28 }));
+      n._ring = svgEl('circle', { class: 'ring', r: 28 });
+      n.appendChild(n._ring);
       n.appendChild(svgEl('circle', { class: 'body', r: 21 }));
       n._nm = svgEl('text', { class: 'nm', 'text-anchor': 'middle', y: -36 });
       n._ip = svgEl('text', { class: 'ip', 'text-anchor': 'middle', y: 41 });
@@ -660,47 +661,60 @@ function handleExecution(e) {
   // a job this browser is waiting on just finished → fetch its result NOW (evented)
   if (awaiting && awaiting.jobId === e.jobId && awaiting.deliver) awaiting.deliver();
   if (e.ts && e.ts < Date.now() - 60000) return; // stale backlog → don't animate
-  if (e.executedBy && VIZ.pos[e.executedBy]) { animateLink(e.executedBy); pulseNode(e.executedBy); }
+  if (e.executedBy && VIZ.pos[e.executedBy]) {
+    animateLink(e.executedBy);                 // 1. job streams out to the worker (white)
+    pulseNode(e.executedBy);                   // 2. the worker runs it (purple pulse)
+    setTimeout(function () { replicateResult(e.executedBy); }, 1950); // 3. result replicates to every node (teal, p2p)
+  }
 }
 
-// Bright white data pulse riding the worker's existing fiber. The overlay lives
-// above idle links but below nodes, then removes itself after the SMIL animation.
-function animateLink(peerId) {
-  var layer = VIZ.layers.packets, to = VIZ.pos[peerId];
-  if (!layer || !to) return;
-  var c = VIZ.center, dx = to.x - c.x, dy = to.y - c.y, length = Math.sqrt(dx * dx + dy * dy);
-  if (!length) return;
-  // A STREAM of small white dashes flowing toward the worker — reads as data
-  // moving down a wire, not a single energy bolt. Steady (linear), moderate pace.
-  var DUR = 1.8, period = 22; // dash 6 + gap 16
+// A STREAM of small dashes flowing from one point to another along a straight
+// line — reads as data moving down a wire, not a single energy bolt. Steady
+// (linear), moderate pace; removes itself after the SMIL animation.
+function flowStream(from, to, opts) {
+  opts = opts || {};
+  var layer = VIZ.layers.packets; if (!layer || !from || !to) return;
+  var DUR = opts.dur || 1.6;
   var pulse = svgEl('line', {
     class: 'viz-link-pulse',
-    x1: c.x, y1: c.y, x2: to.x, y2: to.y,
+    x1: from.x, y1: from.y, x2: to.x, y2: to.y,
     filter: 'url(#vizWhiteGlow)',
     'stroke-dasharray': '6 16',
     'stroke-dashoffset': 0,
   });
-  // negative offset flows the dashes from center → worker; fixed travel so the
-  // visual speed is identical on every link regardless of its length.
-  var dash = svgEl('animate', {
-    attributeName: 'stroke-dashoffset',
-    from: 0,
-    to: -(period * 15),
-    dur: DUR + 's',
-    fill: 'freeze',
-    calcMode: 'linear',
-  });
-  var fade = svgEl('animate', {
-    attributeName: 'opacity',
-    values: '0;0.85;0.85;0',
-    keyTimes: '0;0.18;0.7;1',
-    dur: DUR + 's',
-    fill: 'freeze',
-  });
+  if (opts.stroke) pulse.setAttribute('stroke', opts.stroke);
+  // negative offset flows the dashes from → to; fixed velocity (≈183px/s) so the
+  // visual speed is identical regardless of line length or duration.
+  var dash = svgEl('animate', { attributeName: 'stroke-dashoffset', from: 0, to: -Math.round(183 * DUR), dur: DUR + 's', fill: 'freeze', calcMode: 'linear' });
+  var fade = svgEl('animate', { attributeName: 'opacity', values: '0;0.85;0.85;0', keyTimes: '0;0.18;0.72;1', dur: DUR + 's', fill: 'freeze' });
   pulse.appendChild(dash); pulse.appendChild(fade);
   layer.appendChild(pulse);
   try { dash.beginElement(); fade.beginElement(); } catch (e) {}
-  setTimeout(function () { if (pulse.parentNode) pulse.parentNode.removeChild(pulse); }, DUR * 1000 + 220);
+  setTimeout(function () { if (pulse.parentNode) pulse.parentNode.removeChild(pulse); }, DUR * 1000 + 250);
+}
+
+// Job dispatch: white data streams from the rendezvous out to the chosen worker.
+function animateLink(peerId) {
+  if (VIZ.pos[peerId]) flowStream(VIZ.center, VIZ.pos[peerId], { dur: 1.8 });
+}
+
+// Result written back, the DECENTRALIZED way: it flows from the worker to the
+// rendezvous, then replicates p2p to EVERY other node (CRDT gossip) — so the
+// answer ends up on all nodes, not just where it ran. Teal = the result.
+var RESULT_COLOR = '#54e3c2';
+function replicateResult(peerId) {
+  var from = VIZ.pos[peerId]; if (!from) return;
+  flowStream(from, VIZ.center, { dur: 1.3, stroke: RESULT_COLOR }); // worker → rendezvous
+  pulseNode(peerId, RESULT_COLOR);
+  setTimeout(function () {
+    var others = Object.keys(VIZ.pos).filter(function (id) { return id !== peerId; });
+    others.forEach(function (id, i) {
+      setTimeout(function () {
+        flowStream(VIZ.center, VIZ.pos[id], { dur: 1.2, stroke: RESULT_COLOR }); // rendezvous → every other node
+        pulseNode(id, RESULT_COLOR);
+      }, i * 130); // slight stagger = the result gossiping out across the mesh
+    });
+  }, 1050);
 }
 
 // Send a glowing "job" packet gliding from the rendezvous out to the worker that
@@ -719,8 +733,9 @@ function flyPacket(to) {
   setTimeout(function () { if (dot.parentNode) dot.parentNode.removeChild(dot); }, DUR * 1000 + 200);
 }
 
-function pulseNode(peerId) {
+function pulseNode(peerId, color) {
   var n = VIZ.nodeEls[peerId]; if (!n) return;
+  if (n._ring) n._ring.setAttribute('stroke', color || '#b388ff'); // purple = ran it; teal = got the result
   n.classList.remove('pulsing'); try { n.getBBox(); } catch (e) {} // reflow → restart animation
   n.classList.add('pulsing');
   setTimeout(function () { n.classList.remove('pulsing'); }, 950);

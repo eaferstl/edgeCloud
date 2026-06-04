@@ -72,8 +72,6 @@ OrbitDB-coordinated exactly-once-ish claim protocol, hardened Docker workers. Se
   code ran. (The Aegis/Aestrel direction.)
 - **Verifiable compute / proofs** — zk or replicated-execution proofs for workloads that
   warrant it (long-horizon).
-- **Verifiable compute / proofs** — zk or replicated-execution proofs for workloads that
-  warrant it (long-horizon).
 
 ## C. Confidentiality (don't let the network see your data)
 

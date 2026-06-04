@@ -473,7 +473,7 @@ function renderPill(s) {
   var jobs = s.jobsSubmitted;
   el.textContent = s.workersOnline + ' worker node' + (s.workersOnline === 1 ? '' : 's') + ' online' + cap +
     ' · ' + clients + ' registered client' + (clients === 1 ? '' : 's') +
-    (jobs != null ? ' · ' + jobs + ' job' + (jobs === 1 ? '' : 's') + ' submitted' : '');
+    (jobs != null ? ' · ' + jobs + ' total job' + (jobs === 1 ? '' : 's') + ' submitted' : '');
   // Hover/title shows each device's specs (CPU cores, free RAM/disk, capacity).
   if (s.devices && s.devices.length) {
     el.title = s.devices.map(function (d) {

@@ -15,6 +15,7 @@
   "scripts": {
     "test": "npm run test --workspaces --if-present",
     "server": "npm run start --workspace @edgecloud/server",
-    "worker": "npm run start --workspace @edgecloud/worker"
+    "worker": "npm run start --workspace @edgecloud/worker",
+    "check:device-registry": "node --check device_registry/index.js"
   }
 }

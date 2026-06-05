@@ -732,8 +732,8 @@ function animateLink(peerId) {
 
 // Result written back, the DECENTRALIZED way: it flows from the worker to the
 // rendezvous, then replicates p2p to EVERY other node (CRDT gossip) — so the
-// answer ends up on all nodes, not just where it ran. Teal = the result.
-var RESULT_COLOR = '#54e3c2';
+// answer ends up on all nodes, not just where it ran. Mint = the result.
+var RESULT_COLOR = '#A0EAD8';
 function replicateResult(peerId) {
   var from = VIZ.pos[peerId]; if (!from) return;
   flowStream(from, VIZ.center, { dur: 1.3, stroke: RESULT_COLOR }); // worker → rendezvous
@@ -767,7 +767,7 @@ function flyPacket(to) {
 
 function pulseNode(peerId, color) {
   var n = VIZ.nodeEls[peerId]; if (!n) return;
-  if (n._ring) n._ring.setAttribute('stroke', color || '#b388ff'); // purple = ran it; teal = got the result
+  if (n._ring) n._ring.setAttribute('stroke', color || '#E08A4E'); // terracotta = ran it; mint = got the result
   n.classList.remove('pulsing'); try { n.getBBox(); } catch (e) {} // reflow → restart animation
   n.classList.add('pulsing');
   setTimeout(function () { n.classList.remove('pulsing'); }, 950);

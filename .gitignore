@@ -40,6 +40,10 @@ worker/worker-data/
 # Logs
 *.log
 
+# Local-only compose overrides (machine-specific, e.g. a host GPU/LLM endpoint)
+docker-compose.override.yml
+**/docker-compose.override.yml
+
 # Editor
 .vscode/
 .idea/

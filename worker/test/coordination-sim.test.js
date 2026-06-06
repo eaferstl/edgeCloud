@@ -306,3 +306,73 @@ test('sim: partition where one side is dead → other side still serves it post-
     'the result came from the live partition (the dead partition produced none)'
   );
 });
+
+test('sim: backlog rescans are cheap — grace paid once, settled jobs skipped', async () => {
+  const clock = makeVirtualClock();
+  const net = makeSimNetwork(clock);
+  const attempts = [];
+  const [kp] = makeIdentities(1);
+  const env = makeEnvelope();
+
+  // Registry stub: the submitter starts unregistered; count the grace checks
+  // (each one is a multi-second wait in production).
+  let graceCalls = 0;
+  let registered = false;
+  const registry = {
+    checkWithGrace: async () => {
+      graceCalls++;
+      return registered;
+    },
+    isVerified: () => registered,
+  };
+
+  // Store wrapper counting results-DB reads.
+  const inner = net.storeFor(kp.publicKey);
+  let resultReads = 0;
+  const store = {
+    ...inner,
+    getResult: (jid) => {
+      resultReads++;
+      return inner.getResult(jid);
+    },
+  };
+
+  const w = createCoordinator({
+    workerKey: kp.publicKey,
+    workerSecretKey: kp.secretKey,
+    registry,
+    log: () => {},
+    store,
+    clock,
+    executeJob: executorFor(kp.publicKey, attempts, new Set(), clock),
+    timings: SIM_TIMINGS,
+  });
+
+  // 1. Unregistered submitter: the grace wait is paid exactly once; rescans of
+  //    the same envelope are skipped via the rejectedSubmitters cache.
+  w.handleJob(env);
+  await drive(clock);
+  w.handleJob(env);
+  await drive(clock);
+  w.handleJob(env);
+  await drive(clock);
+  assert.equal(graceCalls, 1, 'grace wait paid once, not per rescan');
+  assert.equal(attempts.length, 0, 'job from unregistered submitter never executes');
+
+  // 2. The submitter registers later: the next rescan notices (cheap isVerified
+  //    re-check), clears the cache, and the job executes normally.
+  registered = true;
+  w.handleJob(env);
+  await drive(clock);
+  assert.equal(attempts.length, 1, 'late registration is picked up by a rescan');
+
+  // 3. The job is now settled: further rescans return before even reading the
+  //    results DB.
+  const readsAfterExec = resultReads;
+  w.handleJob(env);
+  await drive(clock);
+  w.handleJob(env);
+  await drive(clock);
+  assert.equal(resultReads, readsAfterExec, 'settled job: no further results reads');
+  assert.equal(attempts.length, 1, 'settled job: never re-executed');
+});

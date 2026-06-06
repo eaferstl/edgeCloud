@@ -75,6 +75,15 @@ export function createCoordinator({
   // read (CBOR/sync latency) makes validResult momentarily return null and the
   // worker re-wins round 0 uncontested. This set makes "already done here" sticky.
   const published = new Set();
+  // Backlog-rescan churn guards: outcomes that are final (for this process) are
+  // remembered, so the periodic scanBacklog is O(new jobs) instead of re-doing
+  // O(entire queue history) every cycle. Previously each scan re-read and
+  // re-verified every historical result, re-parsed zips, and re-entered the
+  // multi-second registry grace wait for every job from an unregistered
+  // submitter — pinning idle workers at a core+ of CPU once history grew.
+  const settled = new Set(); // jobId — verified result exists / unparseable zip / lacks capability
+  const badEnvelopes = new Set(); // `jobId|pubkey|sig` — invalid signature (envelopes are immutable)
+  const rejectedSubmitters = new Set(); // pubkey — skipped cheaply until the key appears in the registry
 
   const live = {
     status: 'available',
@@ -107,22 +116,38 @@ export function createCoordinator({
     if (!env || typeof env.jobId !== 'string') return;
     const jid = env.jobId;
     const short = jid.slice(0, 12);
+    if (settled.has(jid)) return;
+    const envKey = `${jid}|${env.pubkey}|${env.sig}`;
+    if (badEnvelopes.has(envKey)) return;
+    if (rejectedSubmitters.has(env.pubkey)) {
+      // Cheap re-check on rescans — no grace wait. If the submitter has since
+      // registered (key replicated into the verified set), fall through and give
+      // the job the full path again.
+      if (!registry.isVerified(env.pubkey)) return;
+      rejectedSubmitters.delete(env.pubkey);
+    }
     if (inFlight.has(jid)) return;
     inFlight.add(jid);
     try {
-      // 1. signature FIRST (cheap, before any payload work)
+      // 1. signature FIRST (cheap, before any payload work). Keyed per envelope,
+      // not per jobId: the same jobId can arrive later in a validly-signed
+      // envelope from another submitter.
       const envErr = verifyEnvelope(env);
       if (envErr) {
+        badEnvelopes.add(envKey);
         log(`[job ${short}] rejected: ${envErr}`);
         return;
       }
-      // 2. registered submitter? (never reject on stale data)
+      // 2. registered submitter? (never reject on stale data — but only pay the
+      // grace wait once per unknown submitter, not on every backlog rescan)
       if (!(await registry.checkWithGrace(env.pubkey))) {
+        rejectedSubmitters.add(env.pubkey);
         log(`[job ${short}] rejected: submitter not in registry (after grace)`);
         return;
       }
       // 3. replay/cache: an existing, validly-signed result wins
       if (await validResult(jid)) {
+        settled.add(jid);
         log(`[job ${short}] already has a result; nothing to do`);
         return;
       }
@@ -130,6 +155,7 @@ export function createCoordinator({
       try {
         ({ manifest } = parseJobZipB64(env.zipB64));
       } catch (e) {
+        settled.add(jid); // jobId = sha256(zipB64), so a bad zip is bad forever
         log(`[job ${short}] rejected: ${e.message}`);
         return;
       }
@@ -138,6 +164,7 @@ export function createCoordinator({
       // only to GPU workers; minCores/minRAM are respected). Decentralized: no
       // scheduler decides, each worker just doesn't claim what it can't do.
       if (!meetsRequirements(manifest, capabilities)) {
+        settled.add(jid); // capabilities are static for this process
         log(`[job ${short}] not claiming — lacks capability for ${manifest.type}${manifest.minCores ? ` (needs ${manifest.minCores} cores)` : ''}`);
         return;
       }
@@ -150,7 +177,10 @@ export function createCoordinator({
         if (typeof myRtt === 'number') claim.rtt = myRtt; // advisory (unsigned): our proximity to the rendezvous
         await store.addClaim(claim);
         await clock.sleep(t.claimSettleMs);
-        if (await validResult(jid)) return;
+        if (await validResult(jid)) {
+          settled.add(jid);
+          return;
+        }
 
         const claims = acceptedClaims(await store.readClaims());
         // Pluggable election (proximity + capability; capability already filtered
@@ -170,7 +200,10 @@ export function createCoordinator({
         const deadline = clock.now() + jobTimeout + t.resultMarginMs;
         while (clock.now() < deadline) {
           await clock.sleep(t.pollMs);
-          if (await validResult(jid)) return;
+          if (await validResult(jid)) {
+            settled.add(jid);
+            return;
+          }
         }
         log(`[job ${short}] no result from round-${round} winner; taking over (round ${round + 1})`);
       }
@@ -187,6 +220,7 @@ export function createCoordinator({
     try {
       const r = await executeJob(env);
       if (await validResult(jid)) {
+        settled.add(jid);
         log(`[job ${short}] executed but a result already replicated; discarding duplicate`);
         return;
       }
@@ -194,6 +228,7 @@ export function createCoordinator({
       const result = buildResult({ ...r, jobId: jid, executedBy: workerKey, secretKeyB64: workerSecretKey });
       await store.putResult(jid, result);
       published.add(jid); // sticky: never re-execute this job in this process
+      settled.add(jid); // and never re-evaluate it on backlog rescans
       log(`[job ${short}] result published (exit ${result.exitCode}, ${result.stdout.length}B stdout)`);
     } finally {
       live.currentLoad = Math.max(0, live.currentLoad - 1);

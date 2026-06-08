@@ -20,6 +20,10 @@ import { allEventValues } from '@edgecloud/shared/orbit.js';
 import { GENESIS_SERVER_KEY, GENESIS_MULTIADDRS } from '@edgecloud/shared/constants.js';
 import { multiaddr } from '@multiformats/multiaddr';
 
+// Upper bound on rendezvous servers surfaced to the live map (frontend draws an
+// O(n²) mesh). Far above any real deployment; just a runaway-DB backstop.
+const MAX_VIZ_SERVERS = 32;
+
 async function main() {
   console.log(`[boot] edgeCloud server starting (data: ${config.dataDir})`);
 
@@ -34,15 +38,7 @@ async function main() {
   console.log(`[boot] libp2p peerId: ${libp2p.peerId.toString()}`);
   for (const ma of libp2p.getMultiaddrs()) console.log(`[boot]   listening: ${ma.toString()}`);
 
-  // Peer with the rest of the network. The genesis server has nobody to dial;
-  // every other server dials genesis (and learns more peers via the
-  // edgecloud-servers DB) so their OrbitDB stores replicate together.
   const ownPeerId = libp2p.peerId.toString();
-  const peerAddrs = GENESIS_MULTIADDRS.filter((a) => !a.includes(ownPeerId));
-  if (peerAddrs.length > 0) {
-    dialServers(libp2p, peerAddrs);
-    setInterval(() => dialServers(libp2p, peerAddrs, true), 30000).unref();
-  }
 
   const { orbitdb, databases } = await createOrbitNode(libp2p, config.dataDir);
   for (const [name, d] of Object.entries(databases)) {
@@ -53,6 +49,41 @@ async function main() {
   // which is assigned below — only ever CALLED after boot, so the order is fine.
   const sse = createSSE();
   let heartbeats;
+  // The set of rendezvous servers (the replicated trust chain), each tagged with
+  // whether it's THIS server and whether we currently hold a live libp2p
+  // connection to it — drives the constellation in the live execution map.
+  const serverList = () => {
+    const connected = new Set(libp2p.getConnections().map((c) => c.remotePeer.toString()));
+    const out = [];
+    for (const [pubkey, info] of indexers.state.trustedServers) {
+      const isSelf = pubkey === serverKey.publicKey;
+      // Genesis advertises no multiaddrs in its trust entry; fall back to the constant.
+      let multiaddrs = info.multiaddrs;
+      if ((!multiaddrs || !multiaddrs.length) && pubkey === GENESIS_SERVER_KEY) {
+        multiaddrs = GENESIS_MULTIADDRS;
+      }
+      let pid = null;
+      for (const a of multiaddrs || []) {
+        pid = peerIdFromMultiaddr(a);
+        if (pid) break;
+      }
+      out.push({
+        pubkey,
+        label: info.label || '',
+        multiaddrs: multiaddrs || [],
+        isSelf,
+        connected: isSelf ? true : !!(pid && connected.has(pid)),
+      });
+    }
+    // Cap the constellation so a runaway servers-DB can't blow up the homepage
+    // (the frontend draws an O(n²) mesh). Always keep self. Generous for the demo.
+    if (out.length > MAX_VIZ_SERVERS) {
+      const self = out.filter((s) => s.isSelf);
+      const rest = out.filter((s) => !s.isSelf).slice(0, MAX_VIZ_SERVERS - self.length);
+      return self.concat(rest);
+    }
+    return out;
+  };
   const buildStatus = () => ({
     workersOnline: heartbeats.count(),
     workers: heartbeats.online(),
@@ -63,6 +94,7 @@ async function main() {
     allowlistedEmails: q.allowlistCount(),
     cachedResults: q.cachedResultCount(),
     trustedServers: indexers.state.trustedServers.size,
+    servers: serverList(),
     recentExecutions: q.recentResults(24),
   });
   // Coalesce status pushes to ≤ ~1/sec (heartbeats are chatty); executions push
@@ -94,6 +126,24 @@ async function main() {
   // (valid only if we are already trusted: genesis, or endorsed by a peer).
   await maybeSelfAdvertise({ databases, indexers, serverKey });
 
+  // Peer with the rest of the network: dial genesis (our bootstrap) plus every
+  // OTHER trusted server's advertised multiaddrs, so all rendezvous servers form
+  // a live mesh and their OrbitDB stores replicate together. Recomputed each tick
+  // so servers endorsed at runtime get dialed too; dialServers skips peers we're
+  // already connected to. Genesis-only networks resolve to a no-op.
+  const peerMultiaddrs = () => {
+    const addrs = new Set(GENESIS_MULTIADDRS);
+    for (const [pubkey, info] of indexers.state.trustedServers) {
+      if (pubkey === serverKey.publicKey) continue; // skip self (trust key)
+      for (const a of info.multiaddrs) addrs.add(a);
+    }
+    // Skip only addrs whose TARGET peer is us; keep addrs that merely route
+    // through us as a relay hop (and keep unparseable ones — dial will no-op).
+    return [...addrs].filter((a) => peerIdFromMultiaddr(a) !== ownPeerId);
+  };
+  dialServers(libp2p, peerMultiaddrs());
+  setInterval(() => dialServers(libp2p, peerMultiaddrs(), true), 30000).unref();
+
   const auth = createAuth();
   heartbeats = watchHeartbeats(libp2p, console.log, pushStatus);
   const app = createApp({ q, auth, databases, indexers, heartbeats, serverKey, libp2p, config, sse, buildStatus });
@@ -124,11 +174,23 @@ async function main() {
   process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 
+// Target peer id of a multiaddr (the LAST /p2p/ component, so a relayed
+// `.../p2p/<relay>/p2p-circuit/p2p/<target>` resolves to <target>, not the
+// relay). Returns null for unparseable / peer-less addrs.
+function peerIdFromMultiaddr(addr) {
+  try {
+    const p2p = multiaddr(addr).getComponents().filter((c) => c.name === 'p2p');
+    return p2p.length ? p2p[p2p.length - 1].value : null;
+  } catch {
+    return null;
+  }
+}
+
 async function dialServers(libp2p, addrs, quiet = false) {
   for (const addr of addrs) {
     try {
       const ma = multiaddr(addr);
-      const pid = (/\/p2p\/([^/]+)\/?$/.exec(addr) || [])[1];
+      const pid = peerIdFromMultiaddr(addr);
       if (pid && libp2p.getConnections().some((c) => c.remotePeer.toString() === pid)) continue;
       await libp2p.dial(ma);
       if (!quiet) console.log(`[net] peered with server ${addr}`);

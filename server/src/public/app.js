@@ -584,6 +584,7 @@ function svgEl(name, attrs) {
 var VIZ = {
   inited: false, center: { x: 500, y: 195 },
   layers: {}, nodeEls: {}, linkEls: {}, pos: {},
+  serverEls: {}, serverLinkEls: {},
   seen: new Set(), seeded: false,
 };
 
@@ -601,19 +602,74 @@ function initViz() {
   VIZ.layers.links = svg.appendChild(svgEl('g', { id: 'vizLinks' }));
   VIZ.layers.packets = svg.appendChild(svgEl('g', { id: 'vizPackets' }));
   VIZ.layers.nodes = svg.appendChild(svgEl('g', { id: 'vizNodes' }));
-  // rendezvous / OrbitDB node (built once)
+  // Rendezvous server node(s) are drawn dynamically by renderServers — one
+  // centered node when this is the only server, a small cluster when there are
+  // peers. The cluster centroid stays at VIZ.center so worker links/packets are
+  // unaffected.
   var c = VIZ.center;
-  var g = svgEl('g', { class: 'viz-server', transform: 'translate(' + c.x + ',' + c.y + ')' });
-  g.appendChild(svgEl('circle', { class: 'body', r: 42 }));
-  var t1 = svgEl('text', { class: 't1', 'text-anchor': 'middle', y: -5 }); t1.textContent = 'RENDEZVOUS';
-  var t2 = svgEl('text', { class: 't2', 'text-anchor': 'middle', y: 14 }); t2.textContent = 'OrbitDB · libp2p';
-  var t3 = svgEl('text', { class: 't2', 'text-anchor': 'middle', y: 68 }); t3.textContent = location.hostname;
-  g.appendChild(t1); g.appendChild(t2); g.appendChild(t3);
-  VIZ.layers.nodes.appendChild(g);
   VIZ.empty = svgEl('text', { class: 'viz-empty', 'text-anchor': 'middle', x: c.x, y: c.y + 140 });
   VIZ.empty.textContent = 'no worker nodes online yet';
   svg.appendChild(VIZ.empty);
   VIZ.inited = true;
+}
+
+// Rendezvous servers cluster around the center: a single server sits exactly at
+// VIZ.center (identical to the old static node); multiple servers ring a small
+// radius so they read as a tight cluster with the workers orbiting outside.
+function layoutServers(servers) {
+  var c = VIZ.center, n = servers.length, r = n > 1 ? 38 : 0, pos = {};
+  servers.forEach(function (sv, i) {
+    var ang = -Math.PI / 2 + (n ? (i / n) * 2 * Math.PI : 0);
+    pos[sv.pubkey] = { x: c.x + r * Math.cos(ang), y: c.y + r * Math.sin(ang) };
+  });
+  return pos;
+}
+
+// Draw the rendezvous constellation: every trusted server, the local one
+// highlighted, connected peers in accent, known-but-unreachable peers dimmed,
+// plus a faint mesh link between each pair (animated when both ends are up).
+function renderServers(servers) {
+  servers = (servers || []).slice().sort(function (a, b) { return a.pubkey < b.pubkey ? -1 : 1; });
+  if (!servers.length) servers = [{ pubkey: '__self__', isSelf: true, connected: true, label: '' }]; // old server / first paint
+  var spos = layoutServers(servers), live = {}, linkLive = {};
+
+  // inter-server mesh links — each unordered pair once
+  for (var i = 0; i < servers.length; i++) {
+    for (var j = i + 1; j < servers.length; j++) {
+      var a = servers[i], b = servers[j], key = a.pubkey + '|' + b.pubkey; linkLive[key] = true;
+      var pa = spos[a.pubkey], pb = spos[b.pubkey], up = a.connected && b.connected;
+      var ln = VIZ.serverLinkEls[key];
+      if (!ln) { ln = svgEl('line', {}); VIZ.layers.links.appendChild(ln); VIZ.serverLinkEls[key] = ln; }
+      ln.setAttribute('x1', pa.x); ln.setAttribute('y1', pa.y); ln.setAttribute('x2', pb.x); ln.setAttribute('y2', pb.y);
+      ln.setAttribute('class', 'viz-mesh-link ' + (up ? 'up' : 'down'));
+    }
+  }
+  Object.keys(VIZ.serverLinkEls).forEach(function (k) {
+    if (!linkLive[k]) { var e = VIZ.serverLinkEls[k]; if (e.parentNode) e.parentNode.removeChild(e); delete VIZ.serverLinkEls[k]; }
+  });
+
+  // server nodes
+  servers.forEach(function (sv) {
+    var id = sv.pubkey, p = spos[id]; live[id] = true;
+    var g = VIZ.serverEls[id];
+    if (!g) {
+      g = svgEl('g', {});
+      g.appendChild(svgEl('circle', { class: 'body', r: 42 }));
+      g._t1 = svgEl('text', { class: 't1', 'text-anchor': 'middle', y: -5 });
+      g._t2 = svgEl('text', { class: 't2', 'text-anchor': 'middle', y: 14 });
+      g._t3 = svgEl('text', { class: 't2', 'text-anchor': 'middle', y: 68 });
+      g.appendChild(g._t1); g.appendChild(g._t2); g.appendChild(g._t3);
+      VIZ.layers.nodes.appendChild(g); VIZ.serverEls[id] = g;
+    }
+    g.setAttribute('transform', 'translate(' + p.x + ',' + p.y + ')');
+    g.setAttribute('class', 'viz-server ' + (sv.isSelf ? 'self' : sv.connected ? 'peer' : 'down'));
+    g._t1.textContent = 'RENDEZVOUS';
+    g._t2.textContent = 'OrbitDB · libp2p';
+    g._t3.textContent = sv.isSelf ? location.hostname : (sv.label || (sv.pubkey || '').slice(0, 8));
+  });
+  Object.keys(VIZ.serverEls).forEach(function (id) {
+    if (!live[id]) { var e = VIZ.serverEls[id]; if (e.parentNode) e.parentNode.removeChild(e); delete VIZ.serverEls[id]; }
+  });
 }
 
 function layoutViz(devices) {
@@ -631,6 +687,7 @@ function layoutViz(devices) {
 function renderViz(s) {
   if (!$('vizSvg')) return;
   initViz();
+  renderServers(s.servers);
   var devices = (s.devices || []).slice().sort(function (a, b) { return a.peerId < b.peerId ? -1 : 1; });
   var c = VIZ.center;
   VIZ.pos = layoutViz(devices);

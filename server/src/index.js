@@ -34,15 +34,7 @@ async function main() {
   console.log(`[boot] libp2p peerId: ${libp2p.peerId.toString()}`);
   for (const ma of libp2p.getMultiaddrs()) console.log(`[boot]   listening: ${ma.toString()}`);
 
-  // Peer with the rest of the network. The genesis server has nobody to dial;
-  // every other server dials genesis (and learns more peers via the
-  // edgecloud-servers DB) so their OrbitDB stores replicate together.
   const ownPeerId = libp2p.peerId.toString();
-  const peerAddrs = GENESIS_MULTIADDRS.filter((a) => !a.includes(ownPeerId));
-  if (peerAddrs.length > 0) {
-    dialServers(libp2p, peerAddrs);
-    setInterval(() => dialServers(libp2p, peerAddrs, true), 30000).unref();
-  }
 
   const { orbitdb, databases } = await createOrbitNode(libp2p, config.dataDir);
   for (const [name, d] of Object.entries(databases)) {
@@ -53,6 +45,34 @@ async function main() {
   // which is assigned below — only ever CALLED after boot, so the order is fine.
   const sse = createSSE();
   let heartbeats;
+  // The set of rendezvous servers (the replicated trust chain), each tagged with
+  // whether it's THIS server and whether we currently hold a live libp2p
+  // connection to it — drives the constellation in the live execution map.
+  const serverList = () => {
+    const connected = new Set(libp2p.getConnections().map((c) => c.remotePeer.toString()));
+    const out = [];
+    for (const [pubkey, info] of indexers.state.trustedServers) {
+      const isSelf = pubkey === serverKey.publicKey;
+      // Genesis advertises no multiaddrs in its trust entry; fall back to the constant.
+      let multiaddrs = info.multiaddrs;
+      if ((!multiaddrs || !multiaddrs.length) && pubkey === GENESIS_SERVER_KEY) {
+        multiaddrs = GENESIS_MULTIADDRS;
+      }
+      let pid = null;
+      for (const a of multiaddrs || []) {
+        const m = /\/p2p\/([^/]+)\/?$/.exec(a);
+        if (m) { pid = m[1]; break; }
+      }
+      out.push({
+        pubkey,
+        label: info.label || '',
+        multiaddrs: multiaddrs || [],
+        isSelf,
+        connected: isSelf ? true : !!(pid && connected.has(pid)),
+      });
+    }
+    return out;
+  };
   const buildStatus = () => ({
     workersOnline: heartbeats.count(),
     workers: heartbeats.online(),
@@ -63,6 +83,7 @@ async function main() {
     allowlistedEmails: q.allowlistCount(),
     cachedResults: q.cachedResultCount(),
     trustedServers: indexers.state.trustedServers.size,
+    servers: serverList(),
     recentExecutions: q.recentResults(24),
   });
   // Coalesce status pushes to ≤ ~1/sec (heartbeats are chatty); executions push
@@ -93,6 +114,22 @@ async function main() {
   // Advertise our public multiaddrs to the network via a self-endorsement
   // (valid only if we are already trusted: genesis, or endorsed by a peer).
   await maybeSelfAdvertise({ databases, indexers, serverKey });
+
+  // Peer with the rest of the network: dial genesis (our bootstrap) plus every
+  // OTHER trusted server's advertised multiaddrs, so all rendezvous servers form
+  // a live mesh and their OrbitDB stores replicate together. Recomputed each tick
+  // so servers endorsed at runtime get dialed too; dialServers skips peers we're
+  // already connected to. Genesis-only networks resolve to a no-op.
+  const peerMultiaddrs = () => {
+    const addrs = new Set(GENESIS_MULTIADDRS);
+    for (const [pubkey, info] of indexers.state.trustedServers) {
+      if (pubkey === serverKey.publicKey) continue; // skip self (trust key)
+      for (const a of info.multiaddrs) addrs.add(a);
+    }
+    return [...addrs].filter((a) => !a.includes(ownPeerId)); // skip self (peerId)
+  };
+  dialServers(libp2p, peerMultiaddrs());
+  setInterval(() => dialServers(libp2p, peerMultiaddrs(), true), 30000).unref();
 
   const auth = createAuth();
   heartbeats = watchHeartbeats(libp2p, console.log, pushStatus);

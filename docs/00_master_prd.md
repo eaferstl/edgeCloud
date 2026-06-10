@@ -12,7 +12,7 @@ Presentation date: TODO
 ## 2. Summary
 
 **Built and running.** edgeCloud is a decentralized-compute prototype for Edge
-Esmeralda 2026. An attendee opens `http://146.190.123.91` (mobile or desktop),
+Esmeralda 2026. An attendee opens `https://seed.pandocloud.io` (mobile or desktop),
 registers the email they signed up with — generating an Ed25519 keypair in the
 browser — and submits a small compute job (a JavaScript expression or a WASM module
 from a dropdown). The job is signed, placed on an **OrbitDB**-backed job queue that

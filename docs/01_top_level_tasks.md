@@ -6,12 +6,19 @@ This file tracks the project-level tasks required to make the prototype demo-rea
 
 Teams should update this file when work starts, becomes blocked, is integrated, becomes demo-ready, or is cut.
 
-> **As-built note (2026-06-03):** the end-to-end prototype is implemented, deployed
-> to `http://146.190.123.91`, and verified live (register → submit → single-worker
-> execution → result to the submitter only; duplicate→cache; worker takeover;
-> egress firewall; multi-server endorsement). See `../ARCHITECTURE.md`. The
-> per-team rows below are marked `Demo Ready`/`Integrated`; the remaining open work
-> is presentation/legal review and rehearsal, not engineering.
+> **As-built note (2026-06-03):** the end-to-end prototype is implemented, deployed,
+> and verified live (register → submit → single-worker execution → result to the
+> submitter only; duplicate→cache; worker takeover; egress firewall; multi-server
+> endorsement). See `../ARCHITECTURE.md`. The per-team rows below are marked
+> `Demo Ready`/`Integrated`; the remaining open work is presentation/legal review
+> and rehearsal, not engineering.
+>
+> **Migration update (2026-06-10):** the genesis rendezvous server moved from the
+> original box (`146.190.123.91`) to the owner-operated, HTTPS node
+> **`https://seed.pandocloud.io`**, with the genesis identity preserved (no
+> re-registration) — see `04_decisions_risks_cuts.md` D-013. Old box kept ~1 month
+> as overlap fallback; worker image to be republished so nodes pick up the new
+> `/dns4` default.
 
 ---
 

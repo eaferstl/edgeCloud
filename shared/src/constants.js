@@ -16,22 +16,26 @@ export const DB_SERVERS = 'edgecloud-servers-v1';   // events: server-onboarding
 export const TOPIC_HEARTBEAT = 'edgecloud/heartbeat/v1'; // worker presence (UI only, not correctness)
 
 // Genesis server public key (base64 Ed25519). This is the root of the
-// server trust chain: the key generated on first boot of the original
-// rendezvous server at 146.190.123.91 (2026-06-03). EDGECLOUD_GENESIS_KEY
+// server trust chain: the key first generated 2026-06-03 on the original
+// rendezvous box (146.190.123.91), then migrated 2026-06-10 to the
+// owner-operated node at seed.pandocloud.io. The KEY is unchanged across the
+// move, so every existing registration stays valid. EDGECLOUD_GENESIS_KEY
 // overrides it (used by local dev/test).
 export const GENESIS_SERVER_KEY =
   process.env.EDGECLOUD_GENESIS_KEY || '7HHBxNv04kl9VhOynWxWuchSKgE4v5j/1H/k6r7oSHk=';
 
 // Public multiaddrs of the genesis rendezvous server. Workers bootstrap here.
-// (Additional trusted servers are RECORDED in the edgecloud-servers DB and used
-// for trust, but workers currently dial only RENDEZVOUS_MULTIADDR / these defaults
-// — multiaddr-based discovery of those extra servers is not yet wired up.)
-// RENDEZVOUS_MULTIADDR (comma-separated) overrides.
+// Addressed by /dns4 (a domain, not a bare IP) so the host can move with only a
+// DNS change — no code edit or worker rebuild. (Additional trusted servers are
+// RECORDED in the edgecloud-servers DB and used for trust, but workers currently
+// dial only RENDEZVOUS_MULTIADDR / these defaults — multiaddr-based discovery of
+// those extra servers is not yet wired up.) RENDEZVOUS_MULTIADDR (comma-separated)
+// overrides.
 export const GENESIS_MULTIADDRS = (process.env.RENDEZVOUS_MULTIADDR
   ? process.env.RENDEZVOUS_MULTIADDR.split(',')
   : [
-      '/ip4/146.190.123.91/tcp/4002/ws/p2p/12D3KooWCP89tdR2m8kGn8QWY9qmUYjkgRvvgNywAMfohsR93tT7',
-      '/ip4/146.190.123.91/tcp/4001/p2p/12D3KooWCP89tdR2m8kGn8QWY9qmUYjkgRvvgNywAMfohsR93tT7',
+      '/dns4/seed.pandocloud.io/tcp/4002/ws/p2p/12D3KooWH1ntgWwvMLg6ft6dH49akyjDrNg35QqHdRFnPUK3wnX1',
+      '/dns4/seed.pandocloud.io/tcp/4001/p2p/12D3KooWH1ntgWwvMLg6ft6dH49akyjDrNg35QqHdRFnPUK3wnX1',
     ]).filter(Boolean);
 
 // Claim-protocol timing (ms).

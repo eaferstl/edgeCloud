@@ -13,13 +13,13 @@ v1 runs as Node.js worker nodes (Docker) coordinated peer-to-peer over libp2p + 
 
 ## ▶ Quickstart (Edge Esmeralda 2026)
 
-A working decentralized-compute demo is built and **live at http://146.190.123.91**.
+A working decentralized-compute demo is built and **live at https://seed.pandocloud.io**.
 There are **three roles** — pick yours. How each one gets "onboarded" (i.e. trusted by
 the network) differs, so it's called out in each section.
 
 ### 1. Non-technical user — just run a job (no install)
 
-1. Open **http://146.190.123.91** on your phone or laptop.
+1. Open **https://seed.pandocloud.io** on your phone or laptop.
 2. Enter the **email you registered for Edge Esmeralda with**. Your browser generates an
    Ed25519 keypair locally (stored in `localStorage`; never leaves your device) and sends
    only the **public** key to the server.
@@ -58,7 +58,7 @@ docker compose logs -f                # expect: "worker identity key registered"
 > without an email. **Pull the latest Dockerfile and set `EDGECLOUD_EMAIL`**, then
 > rebuild: `git pull && cd worker && EDGECLOUD_EMAIL=you@example.com docker compose up --build -d`.
 
-It will appear at http://146.190.123.91/api/status (`workersOnline`, identified by its
+It will appear at https://seed.pandocloud.io/api/status (`workersOnline`, identified by its
 **public key**, with its CPU/RAM/disk and free job slots). Point it at a different server with
 `-e RENDEZVOUS_MULTIADDR=/ip4/<host>/tcp/4002/ws/p2p/<peerId>`. The container blocks egress
 to private IPs so submitted code can't reach your LAN.
@@ -158,7 +158,7 @@ npm run endorse-server -- <newServerPubkey> <newServerMultiaddrs> <label>
 
 The endorsement replicates over OrbitDB and workers immediately accept the new server's
 user-registrations — no redeploys. Trust chains transitively from the **genesis** server
-(`146.190.123.91`). Full runbook: **[`infra/provision.md`](infra/provision.md)**.
+(`seed.pandocloud.io`). Full runbook: **[`infra/provision.md`](infra/provision.md)**.
 
 ### Onboarding at a glance
 

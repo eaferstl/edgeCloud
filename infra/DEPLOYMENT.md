@@ -127,6 +127,12 @@ up, and how to add HTTPS to a server that's already running on plain HTTP.
   dial those, not the browser. Browsers only do keygen/signing over HTTPS and POST
   to the API — so plain `ws` for workers is fine. (The app uses tweetnacl in the
   browser regardless of HTTP vs HTTPS, so nothing about the crypto path changes.)
+- Caddy also serves a **plain-HTTP bare-IP vhost** (`http://<public-ip>` →
+  `127.0.0.1:8080`, no TLS, no redirect) for **worker** registration + the
+  registry-grace check. The hardened worker egress firewall blocks in-container
+  DNS on some hosts (e.g. Docker Desktop), so workers reach the API by raw IP, not
+  the domain (see `docs/04_decisions_risks_cuts.md` D-014). `deploy-rendezvous.sh`
+  writes this vhost automatically; the worker default points at it.
 
 ### Steps to add HTTPS to an existing plain-HTTP server
 

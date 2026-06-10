@@ -25,15 +25,24 @@ export const GENESIS_SERVER_KEY =
   process.env.EDGECLOUD_GENESIS_KEY || '7HHBxNv04kl9VhOynWxWuchSKgE4v5j/1H/k6r7oSHk=';
 
 // Public multiaddrs of the genesis rendezvous server. Workers bootstrap here.
-// Addressed by /dns4 (a domain, not a bare IP) so the host can move with only a
-// DNS change — no code edit or worker rebuild. (Additional trusted servers are
-// RECORDED in the edgecloud-servers DB and used for trust, but workers currently
-// dial only RENDEZVOUS_MULTIADDR / these defaults — multiaddr-based discovery of
-// those extra servers is not yet wired up.) RENDEZVOUS_MULTIADDR (comma-separated)
-// overrides.
+// DUAL addressing on purpose: bare /ip4 FIRST, then /dns4.
+//   - /ip4 is listed first because the hardened worker egress firewall blocks
+//     in-container DNS resolution on some platforms (e.g. Docker Desktop, where
+//     the embedded resolver's upstream is an RFC1918 address the firewall drops),
+//     so a /dns4-only bootstrap can't be relied on. Raw IP needs no DNS.
+//   - /dns4 (seed.pandocloud.io) is the portability anchor: where DNS works it
+//     lets the host move with only a DNS change, and it's the canonical on-ramp
+//     the WS3 multi-seed bootstrap builds on. Update the /ip4 if the box's IP
+//     changes; drop it once worker DNS is reliable fleet-wide.
+// (Additional trusted servers are RECORDED in the edgecloud-servers DB and used
+// for trust, but workers currently dial only RENDEZVOUS_MULTIADDR / these defaults
+// — multiaddr-based discovery of those extra servers is not yet wired up.)
+// RENDEZVOUS_MULTIADDR (comma-separated) overrides.
 export const GENESIS_MULTIADDRS = (process.env.RENDEZVOUS_MULTIADDR
   ? process.env.RENDEZVOUS_MULTIADDR.split(',')
   : [
+      '/ip4/64.23.224.76/tcp/4002/ws/p2p/12D3KooWH1ntgWwvMLg6ft6dH49akyjDrNg35QqHdRFnPUK3wnX1',
+      '/ip4/64.23.224.76/tcp/4001/p2p/12D3KooWH1ntgWwvMLg6ft6dH49akyjDrNg35QqHdRFnPUK3wnX1',
       '/dns4/seed.pandocloud.io/tcp/4002/ws/p2p/12D3KooWH1ntgWwvMLg6ft6dH49akyjDrNg35QqHdRFnPUK3wnX1',
       '/dns4/seed.pandocloud.io/tcp/4001/p2p/12D3KooWH1ntgWwvMLg6ft6dH49akyjDrNg35QqHdRFnPUK3wnX1',
     ]).filter(Boolean);

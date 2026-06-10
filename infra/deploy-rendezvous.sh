@@ -270,6 +270,16 @@ $DOMAIN {
     encode gzip
     reverse_proxy 127.0.0.1:$HTTP_PORT
 }
+# Plain-HTTP bare-IP vhost for WORKER nodes. The hardened worker egress firewall
+# blocks in-container DNS on some hosts (e.g. Docker Desktop), so workers dial us
+# by raw IP and need a no-DNS HTTP endpoint for registration + the registry-grace
+# check. "http://" => serve HTTP only, no TLS, no auto-redirect. Browsers use the
+# HTTPS domain above; the worker default (shared/src/constants.js, worker config)
+# points at this IP.
+http://$PUBLIC_IP {
+    encode gzip
+    reverse_proxy 127.0.0.1:$HTTP_PORT
+}
 EOF
   $SUDO systemctl enable caddy
   $SUDO systemctl restart caddy

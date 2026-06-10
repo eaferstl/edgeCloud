@@ -10,8 +10,13 @@ export const config = {
   rendezvous: (process.env.RENDEZVOUS_MULTIADDR
     ? process.env.RENDEZVOUS_MULTIADDR.split(',').map((s) => s.trim()).filter(Boolean)
     : GENESIS_MULTIADDRS),
-  // HTTP fallback for the registry-grace check (any central server).
-  httpFallback: (process.env.EDGECLOUD_HTTP_FALLBACK || 'https://seed.pandocloud.io').replace(/\/$/, ''),
+  // HTTP fallback for worker registration + the registry-grace check (any central
+  // server). Bare IP, NOT the domain: the hardened worker firewall blocks
+  // in-container DNS on some hosts (e.g. Docker Desktop), so a domain here would
+  // be unreachable for those workers. The server serves this over plain HTTP on
+  // its raw IP (Caddy `http://<ip>` vhost); browsers use the HTTPS domain instead.
+  // EDGECLOUD_HTTP_FALLBACK overrides.
+  httpFallback: (process.env.EDGECLOUD_HTTP_FALLBACK || 'http://64.23.224.76').replace(/\/$/, ''),
   // Max simultaneous jobs this node advertises (seeds availableCapacity; from
   // chaodoze's EDGECLOUD_MAX_CONCURRENT). The claim protocol does not yet gate
   // on this — it's advertised for display and future least-loaded routing.

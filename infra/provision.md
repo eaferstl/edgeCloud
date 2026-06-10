@@ -1,5 +1,11 @@
 # VPS provisioning runbook — edgeCloud rendezvous server
 
+> **Canonical genesis is now `seed.pandocloud.io` (`64.23.224.76`), migrated
+> 2026-06-10 — see `docs/04_decisions_risks_cuts.md` D-013.** This runbook's
+> `146.190.123.91` references are the original box (kept ~1 month as overlap
+> fallback, then decommissioned); substitute your own host. The scripted path in
+> `DEPLOYMENT.md` (`deploy-rendezvous.sh`) is the current way to stand one up.
+
 Target: Ubuntu 24.04 VPS (1 GB RAM) at `146.190.123.91`. All steps are
 idempotent; rerunning is safe. Steps 1–5 run as **root**, the rest as
 **ubuntu**.

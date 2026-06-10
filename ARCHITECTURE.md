@@ -10,7 +10,7 @@ the team PRD/spec files describe responsibilities at a higher level.
 
 ## What it does
 
-A non-technical attendee opens `http://146.190.123.91` on phone or laptop, enters
+A non-technical attendee opens `https://seed.pandocloud.io` on phone or laptop, enters
 the email they registered for Edge Esmeralda with, gets an Ed25519 keypair
 generated in-browser, and submits a small compute job (a JS expression or a WASM
 module from a dropdown). The job runs on a volunteer's Docker "worker" node
@@ -245,7 +245,7 @@ scripts/  e2e-client.mjs (API-level end-to-end harness)
 
 ## Running it
 
-- **Use it now**: open `http://146.190.123.91`. (You must be on the Edge Esmeralda
+- **Use it now**: open `https://seed.pandocloud.io`. (You must be on the Edge Esmeralda
   attendee list to register.)
 - **Run a worker** (donate compute): `cd worker && docker compose up --build -d`
   (defaults point at the genesis server). Needs `NET_ADMIN`.

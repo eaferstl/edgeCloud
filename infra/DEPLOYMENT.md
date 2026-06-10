@@ -60,9 +60,14 @@ its multiaddrs; configures Caddy; prints the URL, peerId, and server pubkey.
 
 ## B. Manual deploy / redeploy (already-provisioned server)
 
-This is the day-to-day update flow for the running demo box (`146.190.123.91`,
-SSH alias `edgeCloud`). `/opt/edgecloud` is an **rsync target, not a git
-checkout**, so push the working tree up:
+This is the day-to-day update flow. The current genesis box is
+`seed.pandocloud.io` (`64.23.224.76`, SSH alias `pandocloud`); the original
+`146.190.123.91` / `edgeCloud` box stays up ~1 month as overlap fallback, then is
+decommissioned (see `docs/04_decisions_risks_cuts.md` D-013). On the new box
+`/opt/edgecloud` is a `deploy-rendezvous.sh` **git checkout**, so the canonical
+upgrade is **re-running that script** (idempotent — it git-fetches + resets and
+reuses the existing salt). The rsync flow below documents the original box's
+pattern (it used an rsync target at `ubuntu@edgeCloud`):
 
 ```bash
 # from the repo root on your dev machine
@@ -190,8 +195,8 @@ up, and how to add HTTPS to a server that's already running on plain HTTP.
 These reference the old IP/scheme and should be updated to the domain (see also
 `FOLLOWUPS.md`):
 
-- `server/src/public/index.html`: `og:url`, `og:image`, `twitter:image`
-  (currently `http://146.190.123.91/…`) → `https://edge.example.com/…`.
+- `server/src/public/index.html`: `og:url`, `og:image`, `twitter:image` — **done**
+  (now `https://seed.pandocloud.io/…`); update if the canonical host changes again.
 - The `<meta name="theme-color">` is a separate pending tweak in `FOLLOWUPS.md`.
 - If you later want workers on `wss`: advertise a `/dns4/edge.example.com/tcp/443/
   wss/p2p/<peerId>` multiaddr and have Caddy proxy a WS path to `:4002` — out of

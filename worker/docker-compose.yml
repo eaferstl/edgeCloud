@@ -51,8 +51,10 @@ services:
       # it — worker identity is accountable, not anonymous (THREAT_MODEL R-010).
       EDGECLOUD_EMAIL: "${EDGECLOUD_EMAIL:?set EDGECLOUD_EMAIL to your attendee email}"
       # Rendezvous defaults are baked into shared/src/constants.js; override here.
-      # RENDEZVOUS_MULTIADDR: "/dns4/seed.pandocloud.io/tcp/4002/ws/p2p/12D3KooWH1ntgWwvMLg6ft6dH49akyjDrNg35QqHdRFnPUK3wnX1"
-      # EDGECLOUD_HTTP_FALLBACK: "https://seed.pandocloud.io"
+      # Workers dial by raw IP (the egress firewall blocks in-container DNS on some
+      # hosts); /dns4 is a secondary anchor for hosts where DNS works.
+      # RENDEZVOUS_MULTIADDR: "/ip4/64.23.224.76/tcp/4002/ws/p2p/12D3KooWH1ntgWwvMLg6ft6dH49akyjDrNg35QqHdRFnPUK3wnX1,/ip4/64.23.224.76/tcp/4001/p2p/12D3KooWH1ntgWwvMLg6ft6dH49akyjDrNg35QqHdRFnPUK3wnX1"
+      # EDGECLOUD_HTTP_FALLBACK: "http://64.23.224.76"
       # GPU worker (optional): forward inference jobs to a host LLM endpoint. See
       # README "Optional: a GPU worker". <HOST> = 172.17.0.1 (docker bridge) or
       # 10.0.2.2 (inside a QEMU VM). Also allow it through the egress firewall.
